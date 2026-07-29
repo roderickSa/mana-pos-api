@@ -1,0 +1,37 @@
+{
+  "name": "mana-pos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema POS local del minimarket Maná — offline-first, táctil, con periféricos ESC/POS y balanza serial",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "entrenamiento": "MANA_TRAINING=1 MANA_HTTP_PORT=3211 tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
+  },
+  "imports": {
+    "#*": "./src/*"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.2",
+    "better-sqlite3": "^11.10.0",
+    "drizzle-orm": "^0.44.2",
+    "fastify": "^5.4.0",
+    "node-thermal-printer": "^4.4.4",
+    "serialport": "^13.0.0",
+    "xlsx": "^0.18.5",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.15.0",
+    "drizzle-kit": "^0.31.1",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.4",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

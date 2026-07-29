@@ -1,0 +1,328 @@
+<title>Maná POS — Mockup de venta</title>
+<style>
+  :root {
+    --verde: #1E6B4E;
+    --verde-hondo: #14503A;
+    --ambar: #E8A13D;
+    --ambar-suave: #F6E3C3;
+    --papel: #F4F6F1;
+    --tarjeta: #FFFFFF;
+    --tinta: #21281F;
+    --tinta-suave: #5C665B;
+    --linea: #DDE3DA;
+    --rojo: #C24438;
+    --yape: #722F8E;
+    --sombra: 0 1px 3px rgba(33, 40, 31, 0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --verde: #4CAF82;
+      --verde-hondo: #1E6B4E;
+      --ambar: #E8A13D;
+      --ambar-suave: #3D3022;
+      --papel: #171C17;
+      --tarjeta: #212822;
+      --tinta: #E8ECE6;
+      --tinta-suave: #9AA598;
+      --linea: #333B33;
+      --sombra: 0 1px 3px rgba(0,0,0,0.4);
+    }
+  }
+  :root[data-theme="light"] {
+    --verde: #1E6B4E; --verde-hondo: #14503A; --ambar: #E8A13D; --ambar-suave: #F6E3C3;
+    --papel: #F4F6F1; --tarjeta: #FFFFFF; --tinta: #21281F; --tinta-suave: #5C665B;
+    --linea: #DDE3DA; --sombra: 0 1px 3px rgba(33,40,31,0.10);
+  }
+  :root[data-theme="dark"] {
+    --verde: #4CAF82; --verde-hondo: #1E6B4E; --ambar: #E8A13D; --ambar-suave: #3D3022;
+    --papel: #171C17; --tarjeta: #212822; --tinta: #E8ECE6; --tinta-suave: #9AA598;
+    --linea: #333B33; --sombra: 0 1px 3px rgba(0,0,0,0.4);
+  }
+
+  body {
+    background: var(--papel);
+    color: var(--tinta);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 24px 16px 64px;
+  }
+  .intro { max-width: 1180px; margin: 0 auto 20px; }
+  .intro h1 { font-size: 1.5rem; margin: 0 0 4px; text-wrap: balance; }
+  .intro p { color: var(--tinta-suave); margin: 0; max-width: 65ch; line-height: 1.5; }
+
+  .pos {
+    max-width: 1180px; margin: 0 auto;
+    background: var(--tarjeta);
+    border: 1px solid var(--linea);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 8px 30px rgba(33,40,31,0.12);
+    display: flex; flex-direction: column;
+    min-height: 680px;
+  }
+
+  /* ── Barra superior ── */
+  .topbar {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--verde-hondo);
+    color: #F2F5EF;
+    padding: 10px 18px;
+  }
+  .marca {
+    font-size: 1.45rem; font-weight: 800; letter-spacing: -0.03em;
+    color: #fff;
+  }
+  .marca span { color: var(--ambar); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 999px; padding: 6px 14px;
+    font-size: 0.85rem; font-weight: 600;
+  }
+  .chip small { font-weight: 400; opacity: 0.75; }
+  .topbar .spacer { flex: 1; }
+  .avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--ambar); color: var(--verde-hondo);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 800;
+  }
+
+  /* ── Cuerpo ── */
+  .cuerpo { display: flex; flex: 1; min-height: 0; }
+  .catalogo { flex: 1.6; padding: 16px; display: flex; flex-direction: column; gap: 14px; border-right: 1px solid var(--linea); }
+
+  .buscador {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--papel);
+    border: 1.5px solid var(--linea);
+    border-radius: 12px; padding: 13px 16px;
+    color: var(--tinta-suave); font-size: 1rem;
+  }
+  .buscador b { color: var(--tinta); font-weight: 500; }
+  .buscador .cursor { display:inline-block; width:2px; height:1.1em; background: var(--verde); animation: parp 1.1s step-end infinite; vertical-align: text-bottom; }
+  @keyframes parp { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
+
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tab {
+    border: 1.5px solid var(--linea); background: var(--tarjeta); color: var(--tinta-suave);
+    border-radius: 999px; padding: 9px 18px; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .tab.activa { background: var(--verde); border-color: var(--verde); color: #fff; }
+  .tab:focus-visible, .prod:focus-visible, .pago:focus-visible, .cobrar:focus-visible {
+    outline: 3px solid var(--ambar); outline-offset: 2px;
+  }
+
+  .grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; }
+  .prod {
+    border: 1.5px solid var(--linea); background: var(--tarjeta);
+    border-radius: 12px; padding: 12px 12px 10px; text-align: left;
+    cursor: pointer; font-family: inherit; color: var(--tinta);
+    display: flex; flex-direction: column; gap: 6px; min-height: 96px;
+    box-shadow: var(--sombra);
+  }
+  .prod:hover { border-color: var(--verde); }
+  .prod .cat { width: 26px; height: 5px; border-radius: 3px; }
+  .prod .nombre { font-size: 0.92rem; font-weight: 650; line-height: 1.25; }
+  .prod .precio { margin-top: auto; font-size: 0.88rem; color: var(--tinta-suave); font-variant-numeric: tabular-nums; }
+  .prod .precio b { color: var(--verde); font-weight: 750; }
+  .granel .precio::after { content: " /kg"; font-size: 0.78rem; }
+  .c-fruta { background: #57A05C; } .c-abarrote { background: var(--ambar); }
+  .c-bebida { background: #4A88B5; } .c-limpieza { background: #8A7FB5; }
+
+  /* ── Balanza ── */
+  .balanza {
+    margin-top: auto;
+    display: flex; align-items: center; gap: 14px;
+    background: var(--ambar-suave);
+    border: 1.5px dashed var(--ambar);
+    border-radius: 12px; padding: 12px 16px;
+  }
+  .balanza .peso { font-size: 1.7rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .balanza .peso small { font-size: 0.9rem; font-weight: 600; color: var(--tinta-suave); }
+  .balanza .det { font-size: 0.82rem; color: var(--tinta-suave); line-height: 1.4; }
+  .punto { width: 9px; height: 9px; border-radius: 50%; background: #3FA463; display: inline-block; margin-right: 5px; }
+
+  /* ── Ticket ── */
+  .ticket { flex: 1; display: flex; flex-direction: column; background: var(--tarjeta); min-width: 340px; }
+  .ticket header {
+    padding: 14px 18px 10px; border-bottom: 1px solid var(--linea);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .ticket header h2 { font-size: 1rem; margin: 0; }
+  .ticket header span { font-size: 0.8rem; color: var(--tinta-suave); }
+  .lineas { flex: 1; overflow-y: auto; padding: 6px 0; }
+  .linea {
+    display: grid; grid-template-columns: 1fr auto; gap: 2px 12px;
+    padding: 9px 18px; border-bottom: 1px dashed var(--linea);
+  }
+  .linea .n { font-weight: 600; font-size: 0.94rem; }
+  .linea .d { grid-column: 1; font-size: 0.8rem; color: var(--tinta-suave); font-variant-numeric: tabular-nums; }
+  .linea .m { grid-row: 1 / span 2; align-self: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .linea.granel-l .d b { color: var(--verde); }
+
+  .totales { padding: 12px 18px 6px; border-top: 1px solid var(--linea); font-variant-numeric: tabular-nums; }
+  .fila { display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--tinta-suave); padding: 2px 0; }
+  .fila.total { font-size: 1.45rem; font-weight: 800; color: var(--tinta); padding-top: 6px; }
+
+  .pagos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 10px 18px 0; }
+  .pago {
+    border: 1.5px solid var(--linea); background: var(--tarjeta); color: var(--tinta);
+    border-radius: 10px; padding: 11px 4px; font-size: 0.85rem; font-weight: 650;
+    cursor: pointer; font-family: inherit; text-align: center;
+  }
+  .pago .icono { display: block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; color: var(--tinta-suave); margin-bottom: 3px; text-transform: uppercase; }
+  .pago.sel { border-color: var(--verde); background: var(--verde); color: #fff; }
+  .pago.sel .icono { color: rgba(255,255,255,0.75); }
+  .pago.p-yape:not(.sel) .icono { color: var(--yape); }
+
+  .cobrar {
+    margin: 12px 18px 18px;
+    background: var(--ambar); color: #3A2A0E;
+    border: none; border-radius: 12px;
+    padding: 17px; font-size: 1.15rem; font-weight: 800; letter-spacing: 0.02em;
+    cursor: pointer; font-family: inherit;
+    box-shadow: 0 3px 0 rgba(33,40,31,0.18);
+  }
+  .cobrar:active { transform: translateY(2px); box-shadow: none; }
+
+  /* ── Barra de estado ── */
+  .estado {
+    display: flex; gap: 22px; align-items: center;
+    border-top: 1px solid var(--linea);
+    padding: 8px 18px; font-size: 0.78rem; color: var(--tinta-suave);
+  }
+  .estado .spacer { flex: 1; }
+
+  /* ── Notas de diseño ── */
+  .notas { max-width: 1180px; margin: 28px auto 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .nota { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 12px; padding: 16px 18px; }
+  .nota h3 { margin: 0 0 8px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--tinta-suave); }
+  .nota p { margin: 0; font-size: 0.9rem; line-height: 1.55; color: var(--tinta); }
+  .paleta { display: flex; gap: 8px; margin-top: 10px; }
+  .sw { flex: 1; height: 40px; border-radius: 8px; border: 1px solid var(--linea); position: relative; }
+  .sw::after { content: attr(data-n); position: absolute; bottom: -18px; left: 0; font-size: 0.68rem; color: var(--tinta-suave); }
+
+  @media (max-width: 900px) {
+    .cuerpo { flex-direction: column; }
+    .catalogo { border-right: none; border-bottom: 1px solid var(--linea); }
+  }
+</style>
+
+<div class="intro">
+  <h1>Maná POS — mockup de la pantalla de venta</h1>
+  <p>Propuesta visual para la caja táctil: catálogo y accesos rápidos a la izquierda, ticket siempre visible a la derecha, balanza en vivo abajo. Los datos son de ejemplo.</p>
+</div>
+
+<div class="pos">
+  <div class="topbar">
+    <div class="marca">man<span>á</span></div>
+    <div class="chip"><span class="avatar">R</span> Rosa <small>· cajera</small></div>
+    <div class="chip">Turno mañana <small>· caja abierta 7:02</small></div>
+    <div class="spacer"></div>
+    <div class="chip">Mar 29 jul · 10:47</div>
+  </div>
+
+  <div class="cuerpo">
+    <div class="catalogo">
+      <div class="buscador">🔍 <span><b>Escanea un código</b> o escribe para buscar… <span class="cursor"></span></span></div>
+
+      <div class="tabs">
+        <button class="tab activa">Frecuentes</button>
+        <button class="tab">Frutas y verduras</button>
+        <button class="tab">Abarrotes</button>
+        <button class="tab">Bebidas</button>
+        <button class="tab">Limpieza</button>
+        <button class="tab">Pan</button>
+      </div>
+
+      <div class="grilla">
+        <button class="prod granel"><span class="cat c-fruta"></span><span class="nombre">Papaya</span><span class="precio"><b>S/ 4.50</b></span></button>
+        <button class="prod granel"><span class="cat c-fruta"></span><span class="nombre">Plátano de seda</span><span class="precio"><b>S/ 2.80</b></span></button>
+        <button class="prod granel"><span class="cat c-fruta"></span><span class="nombre">Tomate</span><span class="precio"><b>S/ 3.20</b></span></button>
+        <button class="prod granel"><span class="cat c-fruta"></span><span class="nombre">Papa amarilla</span><span class="precio"><b>S/ 3.90</b></span></button>
+        <button class="prod"><span class="cat c-abarrote"></span><span class="nombre">Arroz Costeño 750 g</span><span class="precio"><b>S/ 4.20</b></span></button>
+        <button class="prod"><span class="cat c-abarrote"></span><span class="nombre">Aceite Primor 1 L</span><span class="precio"><b>S/ 9.80</b></span></button>
+        <button class="prod"><span class="cat c-bebida"></span><span class="nombre">Inca Kola 600 ml</span><span class="precio"><b>S/ 3.50</b></span></button>
+        <button class="prod"><span class="cat c-bebida"></span><span class="nombre">Agua San Luis 625 ml</span><span class="precio"><b>S/ 1.50</b></span></button>
+        <button class="prod"><span class="cat c-abarrote"></span><span class="nombre">Pan francés (unid.)</span><span class="precio"><b>S/ 0.30</b></span></button>
+        <button class="prod"><span class="cat c-limpieza"></span><span class="nombre">Detergente Bolívar 360 g</span><span class="precio"><b>S/ 5.90</b></span></button>
+        <button class="prod"><span class="cat c-abarrote"></span><span class="nombre">Leche Gloria 400 g</span><span class="precio"><b>S/ 4.60</b></span></button>
+        <button class="prod"><span class="cat c-bebida"></span><span class="nombre">Cerveza Pilsen 630 ml</span><span class="precio"><b>S/ 7.50</b></span></button>
+      </div>
+
+      <div class="balanza">
+        <div class="peso">0.645 <small>kg</small></div>
+        <div class="det"><span class="punto"></span>Balanza conectada — el peso entra solo al tocar un producto a granel. Si se desconecta, se habilita captura manual.</div>
+      </div>
+    </div>
+
+    <div class="ticket">
+      <header><h2>Ticket #0148</h2><span>4 productos</span></header>
+      <div class="lineas">
+        <div class="linea granel-l"><span class="n">Papaya</span><span class="m">S/ 2.90</span><span class="d"><b>0.645 kg</b> × S/ 4.50 /kg · balanza</span></div>
+        <div class="linea"><span class="n">Inca Kola 600 ml</span><span class="m">S/ 7.00</span><span class="d">2 × S/ 3.50</span></div>
+        <div class="linea"><span class="n">Arroz Costeño 750 g</span><span class="m">S/ 4.20</span><span class="d">1 × S/ 4.20</span></div>
+        <div class="linea"><span class="n">Pan francés</span><span class="m">S/ 1.80</span><span class="d">6 × S/ 0.30</span></div>
+      </div>
+
+      <div class="totales">
+        <div class="fila"><span>Subtotal</span><span>S/ 15.90</span></div>
+        <div class="fila"><span>Descuento</span><span>—</span></div>
+        <div class="fila total"><span>Total</span><span>S/ 15.90</span></div>
+      </div>
+
+      <div class="pagos">
+        <button class="pago sel"><span class="icono">S/</span>Efectivo</button>
+        <button class="pago p-yape"><span class="icono">●</span>Yape</button>
+        <button class="pago"><span class="icono">▭</span>Tarjeta</button>
+        <button class="pago"><span class="icono">✎</span>Fiado</button>
+      </div>
+
+      <button class="cobrar">COBRAR · S/ 15.90</button>
+    </div>
+  </div>
+
+  <div class="estado">
+    <span><span class="punto"></span>Impresora lista</span>
+    <span><span class="punto"></span>Balanza 0.645 kg</span>
+    <span><span class="punto"></span>Cajón cerrado</span>
+    <span class="spacer"></span>
+    <span>Maná · modo local — sin internet, todo sigue funcionando</span>
+  </div>
+</div>
+
+<div class="notas">
+  <div class="nota">
+    <h3>Paleta</h3>
+    <p>Verde hondo de mercado como color de marca, ámbar-trigo (el "maná") reservado para la acción principal de cobrar. Rojo solo para anular.</p>
+    <div class="paleta">
+      <div class="sw" style="background:#14503A" data-n="verde hondo"></div>
+      <div class="sw" style="background:#1E6B4E" data-n="verde"></div>
+      <div class="sw" style="background:#E8A13D" data-n="ámbar"></div>
+      <div class="sw" style="background:#F4F6F1" data-n="papel"></div>
+      <div class="sw" style="background:#C24438" data-n="anular"></div>
+    </div>
+  </div>
+  <div class="nota">
+    <h3>Reglas táctiles</h3>
+    <p>Todo botón operable mide 48 px o más. Las funciones de cada venta (buscar, granel, cobrar) están a un toque; lo administrativo vive fuera de esta pantalla. Números siempre tabulares para que los montos queden alineados.</p>
+  </div>
+  <div class="nota">
+    <h3>Color por categoría</h3>
+    <p>Cada tarjeta lleva una barrita de color según su categoría (verde frutas, ámbar abarrotes, azul bebidas, lila limpieza): la cajera ubica el producto por color antes que por texto.</p>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('activa'));
+    t.classList.add('activa');
+  }));
+  document.querySelectorAll('.pago').forEach(p => p.addEventListener('click', () => {
+    document.querySelectorAll('.pago').forEach(x => x.classList.remove('sel'));
+    p.classList.add('sel');
+  }));
+</script>
