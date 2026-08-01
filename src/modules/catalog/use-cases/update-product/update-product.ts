@@ -1,5 +1,6 @@
 import type { TimeManager } from '#shared/ports/time-manager.js';
-import { normalizeSearchText } from '#modules/catalog/domain/normalize-search-text.js';
+import { normalizeSearchText } from '#shared/domain/normalize-search-text.js';
+import { unitCostFromPack } from '#modules/catalog/domain/pack-pricing.js';
 import { UnitProduct, WeightProduct, type Product } from '#modules/catalog/domain/product.js';
 import type { ProductRepository } from '#modules/catalog/ports/product-repository.js';
 import type { UpdateProductInput } from '#modules/catalog/use-cases/update-product/update-product.input.js';
@@ -32,8 +33,10 @@ export class UpdateProduct {
       }
     }
 
-    if (input.supplierId !== null && !(await this.supplierLookup.exists(input.supplierId))) {
-      return new SupplierNotFound(input.supplierId);
+    for (const supplierId of input.supplierIds) {
+      if (!(await this.supplierLookup.exists(supplierId))) {
+        return new SupplierNotFound(supplierId);
+      }
     }
 
     if (input.barcode !== null) {
@@ -53,6 +56,11 @@ export class UpdateProduct {
     const normalizedName = normalizeSearchText(input.name);
 
     if (existing instanceof UnitProduct) {
+      // Con datos de empaque, el costo unitario se deriva del costo por caja.
+      const costCents =
+        input.packSize !== null && input.packCostCents !== null
+          ? unitCostFromPack(input.packCostCents, input.packSize)
+          : input.costCents;
       return new UnitProduct(
         existing.id,
         input.barcode,
@@ -60,10 +68,12 @@ export class UpdateProduct {
         input.name,
         normalizedName,
         input.category,
-        input.supplierId,
+        input.supplierIds,
         existing.imagePath,
         input.priceCents,
-        input.costCents,
+        costCents,
+        input.packSize,
+        input.packCostCents,
         existing.stockUnits,
         input.stockMinimum,
         input.active,
@@ -80,7 +90,7 @@ export class UpdateProduct {
       input.name,
       normalizedName,
       input.category,
-      input.supplierId,
+      input.supplierIds,
       existing.imagePath,
       input.priceCents,
       input.costCents,

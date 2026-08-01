@@ -27,6 +27,22 @@ export function registerCatalogRoutes(
   server.get('/catalog/products/by-barcode/:barcode', (request, reply) =>
     controller.byBarcode(request, reply),
   );
+  server.get('/catalog/products/:id/barcodes', (request, reply) =>
+    controller.barcodes(request, reply),
+  );
+  server.post('/catalog/products/:id/barcodes', (request, reply) =>
+    controller.addBarcode(request, reply),
+  );
+  server.delete('/catalog/products/:id/barcodes/:barcode', (request, reply) =>
+    controller.removeBarcode(request, reply),
+  );
+  server.post('/catalog/products/merge', (request, reply) => controller.merge(request, reply));
+  server.post('/catalog/products/:id/suppliers/:supplierId', (request, reply) =>
+    controller.linkSupplier(request, reply),
+  );
+  server.delete('/catalog/products/:id/suppliers/:supplierId', (request, reply) =>
+    controller.unlinkSupplier(request, reply),
+  );
   server.put('/catalog/products/:id/image', (request, reply) =>
     controller.setImage(request, reply),
   );

@@ -147,6 +147,7 @@ function toAccountResponse(account: CustomerAccount): Record<string, unknown> {
     creditLimitCents: account.customer.creditLimitCents,
     balanceCents: account.balanceCents,
     availableCents: account.availableCents,
+    debtSince: account.debtSince?.toISOString() ?? null,
   };
 }
 

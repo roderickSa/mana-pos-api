@@ -1,5 +1,5 @@
 import type { Nullable } from '#shared/domain/nullable.js';
-import { normalizeSearchText } from '#modules/catalog/domain/normalize-search-text.js';
+import { normalizeSearchText } from '#shared/domain/normalize-search-text.js';
 import type { StockMovementPage } from '#modules/inventory/domain/stock-movement-page.js';
 import { MovementSearchParams } from '#modules/inventory/ports/movement-search-params.js';
 import type { InventoryRepository } from '#modules/inventory/ports/inventory-repository.js';

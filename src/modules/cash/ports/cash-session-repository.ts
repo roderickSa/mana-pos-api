@@ -7,4 +7,6 @@ export interface CashSessionRepository {
   appendMovement(movement: CashMovement): Promise<void>;
   movementsOf(sessionId: string): Promise<CashMovement[]>;
   lastClosed(): Promise<Nullable<CashSession>>;
+  // Historial de cierres, del más reciente al más antiguo.
+  listClosed(limit: number): Promise<CashSession[]>;
 }

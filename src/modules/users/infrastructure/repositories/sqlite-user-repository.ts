@@ -19,6 +19,7 @@ export class SqliteUserRepository implements UserRepository {
       role: user.role,
       active: user.active,
       createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt,
     };
     await this.db.insert(users).values(row).onConflictDoUpdate({ target: users.id, set: row });
   }
@@ -40,5 +41,5 @@ export class SqliteUserRepository implements UserRepository {
 }
 
 function toUser(row: UserRow): User {
-  return new User(row.id, row.name, row.pinHash, row.role, row.active, row.createdAt);
+  return new User(row.id, row.name, row.pinHash, row.role, row.active, row.createdAt, row.lastLoginAt);
 }

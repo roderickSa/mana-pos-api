@@ -33,6 +33,10 @@ export class GetStatement {
     }
     const entries = await this.creditLedger.entriesOf(input.customerId);
     const balance = await this.creditLedger.balanceOf(input.customerId);
-    return new Statement(new CustomerAccount(customer, balance), entries);
+    const debtSince = await this.creditLedger.debtSinceOf([customer.id]);
+    return new Statement(
+      new CustomerAccount(customer, balance, debtSince.get(customer.id) ?? null),
+      entries,
+    );
   }
 }

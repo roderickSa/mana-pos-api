@@ -34,9 +34,11 @@ describe('UpdateProduct', () => {
         null,
         'Inca Kola 600ml',
         'bebidas',
-        null,
+        [],
         380,
         300,
+        null,
+        null,
         6,
         true,
         true,
@@ -52,24 +54,39 @@ describe('UpdateProduct', () => {
     expect(result.product.createdAt).toEqual(existing.createdAt);
   });
 
+  it('derives the unit cost from the pack cost when pack data is provided', async () => {
+    await repository.save(unitProductMother({ id: 'p1' }));
+
+    const result = await useCase.execute(
+      new UpdateProductInput('p1', null, null, 'Inca Kola 600ml', 'bebidas', [], 380, 0, 6, 1800, 6, true, false),
+    );
+
+    expect(result).toBeInstanceOf(ProductUpdated);
+    if (!(result instanceof ProductUpdated)) return;
+    if (!(result.product instanceof UnitProduct)) return;
+    expect(result.product.packSize).toBe(6);
+    expect(result.product.packCostCents).toBe(1800);
+    expect(result.product.costCents).toBe(300);
+  });
+
   it('assigns an existing supplier', async () => {
     supplierLookup.addSupplier('prov-1');
     await repository.save(unitProductMother({ id: 'p1' }));
 
     const result = await useCase.execute(
-      new UpdateProductInput('p1', null, null, 'Inca Kola 600ml', 'bebidas', 'prov-1', 380, 300, 6, true, false),
+      new UpdateProductInput('p1', null, null, 'Inca Kola 600ml', 'bebidas', ['prov-1'], 380, 300, null, null, 6, true, false),
     );
 
     expect(result).toBeInstanceOf(ProductUpdated);
     if (!(result instanceof ProductUpdated)) return;
-    expect(result.product.supplierId).toBe('prov-1');
+    expect(result.product.supplierIds).toEqual(['prov-1']);
   });
 
   it('rejects an unknown supplier', async () => {
     await repository.save(unitProductMother({ id: 'p1' }));
 
     const result = await useCase.execute(
-      new UpdateProductInput('p1', null, null, 'X', 'bebidas', 'prov-fantasma', 380, 300, 6, true, false),
+      new UpdateProductInput('p1', null, null, 'X', 'bebidas', ['prov-fantasma'], 380, 300, null, null, 6, true, false),
     );
 
     expect(result).toBeInstanceOf(SupplierNotFound);
@@ -77,7 +94,7 @@ describe('UpdateProduct', () => {
 
   it('returns ProductNotFound for an unknown id', async () => {
     const result = await useCase.execute(
-      new UpdateProductInput('missing', null, null, 'X', 'abarrotes', null, 100, 50, 0, true, false),
+      new UpdateProductInput('missing', null, null, 'X', 'abarrotes', [], 100, 50, null, null, 0, true, false),
     );
 
     expect(result).toBeInstanceOf(ProductNotFound);
@@ -88,7 +105,7 @@ describe('UpdateProduct', () => {
     await repository.save(unitProductMother({ id: 'p2', barcode: '222' }));
 
     const result = await useCase.execute(
-      new UpdateProductInput('p2', '111', null, 'Otro', 'bebidas', null, 100, 50, 0, true, false),
+      new UpdateProductInput('p2', '111', null, 'Otro', 'bebidas', [], 100, 50, null, null, 0, true, false),
     );
 
     expect(result).toBeInstanceOf(BarcodeTakenByAnotherProduct);
@@ -98,7 +115,7 @@ describe('UpdateProduct', () => {
     await repository.save(unitProductMother({ id: 'p1', barcode: '111' }));
 
     const result = await useCase.execute(
-      new UpdateProductInput('p1', '111', null, 'Renombrado', 'bebidas', null, 100, 50, 0, true, false),
+      new UpdateProductInput('p1', '111', null, 'Renombrado', 'bebidas', [], 100, 50, null, null, 0, true, false),
     );
 
     expect(result).toBeInstanceOf(ProductUpdated);

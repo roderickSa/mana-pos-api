@@ -52,6 +52,8 @@ import {
   TicketDetailFound,
   TicketDetailNotFound,
 } from '#modules/sales/use-cases/get-ticket-detail/get-ticket-detail.js';
+import { igvBreakdownOf } from '#modules/sales/domain/igv.js';
+import type { IgvService } from '#modules/settings/use-cases/igv-service.js';
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'Efectivo',
@@ -67,12 +69,17 @@ export class SalesController {
     private readonly searchTickets: SearchTickets,
     private readonly reprintReceipt: ReprintReceipt,
     private readonly getTicketDetail: GetTicketDetail,
+    private readonly igvService: IgvService,
   ) {}
 
   async detail(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const result = await this.getTicketDetail.execute(new GetTicketDetailInput(ticketIdParam(request)));
     if (result instanceof TicketDetailFound) {
-      await reply.status(200).send(toTicketResponse(result.ticket, null));
+      const rate = await this.igvService.getRatePercent();
+      await reply.status(200).send({
+        ...toTicketResponse(result.ticket, null),
+        igv: igvBreakdownOf(result.ticket.totalCents, rate),
+      });
       return;
     }
     if (result instanceof TicketDetailNotFound) {
@@ -139,6 +146,8 @@ export class SalesController {
         chargedTotalCents: result.summary.chargedTotalCents,
         byMethod: result.summary.byMethod,
         voidedByUser: result.summary.voidedByUser,
+        soldByUser: result.summary.soldByUser,
+        igv: igvBreakdownOf(result.summary.chargedTotalCents, await this.igvService.getRatePercent()),
       },
     });
   }

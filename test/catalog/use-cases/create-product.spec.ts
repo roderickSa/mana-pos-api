@@ -6,6 +6,7 @@ import {
 } from '#modules/catalog/use-cases/create-product/create-product.input.js';
 import {
   BarcodeAlreadyInUse,
+  NameAlreadyInUse,
   ProductCreated,
   SupplierNotFound,
 } from '#modules/catalog/use-cases/create-product/create-product.output.js';
@@ -38,10 +39,13 @@ describe('CreateProduct', () => {
         null,
         'Café Altomayo 50g',
         'abarrotes',
-        null,
+        [],
         890,
         650,
+        null,
+        null,
         3,
+        false,
         false,
       ),
     );
@@ -56,9 +60,22 @@ describe('CreateProduct', () => {
     expect(repository.all()).toHaveLength(1);
   });
 
+  it('derives the unit cost from the pack cost when pack data is provided', async () => {
+    const result = await useCase.execute(
+      new CreateUnitProductInput(null, null, 'Agua San Luis 625ml', 'bebidas', [], 150, 0, 15, 1650, 5, false, false),
+    );
+
+    expect(result).toBeInstanceOf(ProductCreated);
+    if (!(result instanceof ProductCreated)) return;
+    if (!(result.product instanceof UnitProduct)) return;
+    expect(result.product.packSize).toBe(15);
+    expect(result.product.packCostCents).toBe(1650);
+    expect(result.product.costCents).toBe(110);
+  });
+
   it('creates a weight product without barcode', async () => {
     const result = await useCase.execute(
-      new CreateWeightProductInput(null, null, 'Plátano de seda', 'frutas-verduras', null, 280, 180, 500, true),
+      new CreateWeightProductInput(null, null, 'Plátano de seda', 'frutas-verduras', [], 280, 180, 500, true, false),
     );
 
     expect(result).toBeInstanceOf(ProductCreated);
@@ -74,28 +91,52 @@ describe('CreateProduct', () => {
     supplierLookup.addSupplier('prov-1');
 
     const result = await useCase.execute(
-      new CreateUnitProductInput(null, null, 'Yogurt Gloria', 'abarrotes', 'prov-1', 550, 430, 2, false),
+      new CreateUnitProductInput(null, null, 'Yogurt Gloria', 'abarrotes', ['prov-1'], 550, 430, null, null, 2, false, false),
     );
 
     expect(result).toBeInstanceOf(ProductCreated);
     if (!(result instanceof ProductCreated)) return;
-    expect(result.product.supplierId).toBe('prov-1');
+    expect(result.product.supplierIds).toEqual(['prov-1']);
   });
 
   it('rejects an unknown supplier', async () => {
     const result = await useCase.execute(
-      new CreateUnitProductInput(null, null, 'Yogurt Gloria', 'abarrotes', 'prov-fantasma', 550, 430, 2, false),
+      new CreateUnitProductInput(null, null, 'Yogurt Gloria', 'abarrotes', ['prov-fantasma'], 550, 430, null, null, 2, false, false),
     );
 
     expect(result).toBeInstanceOf(SupplierNotFound);
     expect(repository.all()).toHaveLength(0);
   });
 
+  it('warns when another product already has the same normalized name', async () => {
+    await repository.save(unitProductMother({ id: 'p1', name: 'Inca Kola 600ml', barcode: '111' }));
+
+    const result = await useCase.execute(
+      new CreateUnitProductInput(null, null, 'INCA KOLA 600ML', 'bebidas', [], 350, 280, null, null, 0, false, false),
+    );
+
+    expect(result).toBeInstanceOf(NameAlreadyInUse);
+    if (!(result instanceof NameAlreadyInUse)) return;
+    expect(result.existingProductId).toBe('p1');
+    expect(repository.all()).toHaveLength(1);
+  });
+
+  it('creates the duplicate when the user explicitly confirms', async () => {
+    await repository.save(unitProductMother({ id: 'p1', name: 'Inca Kola 600ml', barcode: '111' }));
+
+    const result = await useCase.execute(
+      new CreateUnitProductInput(null, null, 'Inca Kola 600ml', 'bebidas', [], 350, 280, null, null, 0, false, true),
+    );
+
+    expect(result).toBeInstanceOf(ProductCreated);
+    expect(repository.all()).toHaveLength(2);
+  });
+
   it('rejects a barcode that is already in use', async () => {
     await repository.save(unitProductMother({ barcode: '7750182000123' }));
 
     const result = await useCase.execute(
-      new CreateUnitProductInput('7750182000123', null, 'Otra gaseosa', 'bebidas', null, 300, 200, 0, false),
+      new CreateUnitProductInput('7750182000123', null, 'Otra gaseosa', 'bebidas', [], 300, 200, null, null, 0, false, false),
     );
 
     expect(result).toBeInstanceOf(BarcodeAlreadyInUse);

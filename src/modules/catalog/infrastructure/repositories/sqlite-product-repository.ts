@@ -1,8 +1,8 @@
-import { and, eq, or, sql, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
 
 import type { Nullable } from '#shared/domain/nullable.js';
 import type { DatabaseClient } from '#shared/infrastructure/database/client.js';
-import { products } from '#shared/infrastructure/database/schema.js';
+import { productBarcodes, products, productSuppliers } from '#shared/infrastructure/database/schema.js';
 import { fuzzyMatchesName } from '#modules/catalog/domain/fuzzy-match.js';
 import { UnitProduct, WeightProduct, type Product } from '#modules/catalog/domain/product.js';
 import type { ProductRepository } from '#modules/catalog/ports/product-repository.js';
@@ -20,21 +20,61 @@ export class SqliteProductRepository implements ProductRepository {
       .insert(products)
       .values(row)
       .onConflictDoUpdate({ target: products.id, set: row });
+    await this.db.delete(productSuppliers).where(eq(productSuppliers.productId, product.id));
+    if (product.supplierIds.length > 0) {
+      await this.db
+        .insert(productSuppliers)
+        .values(product.supplierIds.map((supplierId) => ({ productId: product.id, supplierId })));
+    }
   }
 
   async findById(id: string): Promise<Nullable<Product>> {
     const row = await this.db.query.products.findFirst({ where: eq(products.id, id) });
-    return row === undefined ? null : this.toEntity(row);
+    return row === undefined ? null : this.toEntityWithSuppliers(row);
   }
 
   async findByBarcode(barcode: string): Promise<Nullable<Product>> {
     const row = await this.db.query.products.findFirst({ where: eq(products.barcode, barcode) });
-    return row === undefined ? null : this.toEntity(row);
+    if (row !== undefined) {
+      return this.toEntityWithSuppliers(row);
+    }
+    // Alias: un producto puede tener N códigos; escanear cualquiera lo trae.
+    const alias = await this.db.query.productBarcodes.findFirst({
+      where: eq(productBarcodes.barcode, barcode),
+    });
+    return alias === undefined ? null : this.findById(alias.productId);
+  }
+
+  async findByNormalizedName(normalizedName: string): Promise<Nullable<Product>> {
+    const row = await this.db.query.products.findFirst({
+      where: eq(products.normalizedName, normalizedName),
+    });
+    return row === undefined ? null : this.toEntityWithSuppliers(row);
   }
 
   async findByShortCode(shortCode: string): Promise<Nullable<Product>> {
     const row = await this.db.query.products.findFirst({ where: eq(products.shortCode, shortCode) });
-    return row === undefined ? null : this.toEntity(row);
+    return row === undefined ? null : this.toEntityWithSuppliers(row);
+  }
+
+  private async toEntityWithSuppliers(row: ProductRow): Promise<Product> {
+    const supplierIds = await this.supplierIdsByProduct([row.id]);
+    return this.toEntity(row, supplierIds.get(row.id) ?? []);
+  }
+
+  private async supplierIdsByProduct(productIds: string[]): Promise<Map<string, string[]>> {
+    if (productIds.length === 0) return new Map();
+    const rows = await this.db
+      .select()
+      .from(productSuppliers)
+      .where(inArray(productSuppliers.productId, productIds));
+    const byProduct = new Map<string, string[]>();
+    for (const row of rows) {
+      const ids = byProduct.get(row.productId) ?? [];
+      ids.push(row.supplierId);
+      byProduct.set(row.productId, ids);
+    }
+    return byProduct;
   }
 
   async count(params: SearchProductsParams): Promise<number> {
@@ -62,6 +102,14 @@ export class SqliteProductRepository implements ProductRepository {
       conditions.push(
         sql`${products.stockQuantity} <= ${products.stockMinimum} AND ${products.stockMinimum} > 0`,
       );
+    }
+    if (params.supplierId !== null) {
+      conditions.push(
+        sql`EXISTS (SELECT 1 FROM product_suppliers ps WHERE ps.product_id = ${products.id} AND ps.supplier_id = ${params.supplierId})`,
+      );
+    }
+    if (params.onlyMissingCost) {
+      conditions.push(sql`${products.costCents} = 0`);
     }
     if (params.normalizedQuery !== null) {
       const byName = params.normalizedQuery.split(' ').map((token) => {
@@ -109,9 +157,14 @@ export class SqliteProductRepository implements ProductRepository {
       .offset(params.offset);
 
     if (rows.length > 0 || params.normalizedQuery === null || params.offset > 0) {
-      return rows.map((row) => this.toEntity(row));
+      return this.toEntities(rows);
     }
     return this.searchFuzzy(params);
+  }
+
+  private async toEntities(rows: ProductRow[]): Promise<Product[]> {
+    const supplierIds = await this.supplierIdsByProduct(rows.map((row) => row.id));
+    return rows.map((row) => this.toEntity(row, supplierIds.get(row.id) ?? []));
   }
 
   // Segundo intento tolerante a typos: si el LIKE no encontró nada, se
@@ -124,6 +177,11 @@ export class SqliteProductRepository implements ProductRepository {
     if (!params.includeInactive) filters.push(eq(products.active, true));
     if (params.category !== null) filters.push(eq(products.category, params.category));
     if (params.onlyQuickAccess) filters.push(eq(products.quickAccess, true));
+    if (params.supplierId !== null) {
+      filters.push(
+        sql`EXISTS (SELECT 1 FROM product_suppliers ps WHERE ps.product_id = ${products.id} AND ps.supplier_id = ${params.supplierId})`,
+      );
+    }
 
     const candidates = await this.db
       .select()
@@ -132,13 +190,12 @@ export class SqliteProductRepository implements ProductRepository {
       .orderBy(products.name)
       .limit(1000);
 
-    return candidates
-      .filter((row) => fuzzyMatchesName(row.normalizedName, query))
-      .slice(0, params.limit)
-      .map((row) => this.toEntity(row));
+    return this.toEntities(
+      candidates.filter((row) => fuzzyMatchesName(row.normalizedName, query)).slice(0, params.limit),
+    );
   }
 
-  private toEntity(row: ProductRow): Product {
+  private toEntity(row: ProductRow, supplierIds: string[]): Product {
     if (row.saleType === 'unit') {
       return new UnitProduct(
         row.id,
@@ -147,10 +204,12 @@ export class SqliteProductRepository implements ProductRepository {
         row.name,
         row.normalizedName,
         row.category,
-        row.supplierId,
+        supplierIds,
         row.imagePath,
         row.priceCents,
         row.costCents,
+        row.packSize,
+        row.packCostCents,
         row.stockQuantity,
         row.stockMinimum,
         row.active,
@@ -167,7 +226,7 @@ export class SqliteProductRepository implements ProductRepository {
       row.name,
       row.normalizedName,
       row.category,
-      row.supplierId,
+      supplierIds,
       row.imagePath,
       row.priceCents,
       row.costCents,
@@ -190,11 +249,12 @@ export class SqliteProductRepository implements ProductRepository {
       name: product.name,
       normalizedName: product.normalizedName,
       category: product.category,
-      supplierId: product.supplierId,
       imagePath: product.imagePath,
       saleType: isUnit ? 'unit' : 'weight',
       priceCents: isUnit ? product.priceCents : product.pricePerKgCents,
       costCents: isUnit ? product.costCents : product.costPerKgCents,
+      packSize: isUnit ? product.packSize : null,
+      packCostCents: isUnit ? product.packCostCents : null,
       stockQuantity: isUnit ? product.stockUnits : product.stockGrams,
       stockMinimum: isUnit ? product.stockMinimum : product.stockMinimumGrams,
       active: product.active,

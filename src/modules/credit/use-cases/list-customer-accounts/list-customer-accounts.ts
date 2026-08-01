@@ -19,8 +19,10 @@ export class ListCustomerAccounts {
   async execute(input: ListCustomerAccountsInput): Promise<CustomerAccount[]> {
     const customers = await this.customerRepository.search(input.query);
     const balances = await this.creditLedger.balancesOf(customers.map((customer) => customer.id));
+    const debtSince = await this.creditLedger.debtSinceOf(customers.map((customer) => customer.id));
     const accounts = customers.map(
-      (customer) => new CustomerAccount(customer, balances.get(customer.id) ?? 0),
+      (customer) =>
+        new CustomerAccount(customer, balances.get(customer.id) ?? 0, debtSince.get(customer.id) ?? null),
     );
     const filtered = input.onlyDebtors
       ? accounts.filter((account) => account.balanceCents > 0)

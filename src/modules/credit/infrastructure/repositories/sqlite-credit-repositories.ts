@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Nullable } from '#shared/domain/nullable.js';
 import type { DatabaseClient } from '#shared/infrastructure/database/client.js';
 import { creditEntries, customers } from '#shared/infrastructure/database/schema.js';
-import { normalizeSearchText } from '#modules/catalog/domain/normalize-search-text.js';
+import { normalizeSearchText } from '#shared/domain/normalize-search-text.js';
 import { Customer } from '#modules/credit/domain/customer.js';
 import { CreditEntry } from '#modules/credit/domain/credit-entry.js';
 import type { CreditLedger } from '#modules/credit/ports/credit-ledger.js';
@@ -95,6 +95,32 @@ export class SqliteCreditLedger implements CreditLedger {
       .where(inArray(creditEntries.customerId, customerIds))
       .groupBy(creditEntries.customerId);
     return new Map(rows.map((row) => [row.customerId, row.value]));
+  }
+
+  // Camina el ledger por cliente: la deuda vigente arranca en el primer cargo
+  // posterior al último momento en que el saldo llegó a 0 (o menos).
+  async debtSinceOf(customerIds: string[]): Promise<Map<string, Date>> {
+    const result = new Map<string, Date>();
+    if (customerIds.length === 0) {
+      return result;
+    }
+    const rows = await this.db
+      .select()
+      .from(creditEntries)
+      .where(inArray(creditEntries.customerId, customerIds))
+      .orderBy(creditEntries.createdAt);
+    const runningByCustomer = new Map<string, number>();
+    for (const row of rows) {
+      const running = runningByCustomer.get(row.customerId) ?? 0;
+      const next = running + (row.type === 'charge' ? row.amountCents : -row.amountCents);
+      runningByCustomer.set(row.customerId, next);
+      if (running <= 0 && next > 0) {
+        result.set(row.customerId, row.createdAt);
+      } else if (next <= 0) {
+        result.delete(row.customerId);
+      }
+    }
+    return result;
   }
 
   async chargeForTicket(ticketId: string): Promise<Nullable<CreditEntry>> {

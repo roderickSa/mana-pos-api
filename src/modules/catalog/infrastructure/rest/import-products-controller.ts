@@ -9,6 +9,7 @@ import {
 } from '#modules/catalog/use-cases/create-product/create-product.input.js';
 import {
   BarcodeAlreadyInUse,
+  NameAlreadyInUse,
   ProductCreated,
   ShortCodeAlreadyInUse,
   SupplierNotFound,
@@ -133,6 +134,7 @@ export class ImportProductsController {
       const row = parsed.data;
 
       const supplierId = await this.resolveSupplier(row.proveedor, supplierIdsByName);
+      const supplierIds = supplierId === null ? [] : [supplierId];
       const barcode = row.codigo_barras === undefined || row.codigo_barras === '' ? null : row.codigo_barras;
       const quickAccess = row.acceso_rapido === 'si' || row.acceso_rapido === 'sí';
       const priceCents = Math.round(row.precio * 100);
@@ -141,8 +143,8 @@ export class ImportProductsController {
 
       const input =
         row.tipo === 'unidad'
-          ? new CreateUnitProductInput(barcode, null, row.nombre, row.categoria, supplierId, priceCents, costCents, stockMinimum, quickAccess)
-          : new CreateWeightProductInput(barcode, null, row.nombre, row.categoria, supplierId, priceCents, costCents, stockMinimum, quickAccess);
+          ? new CreateUnitProductInput(barcode, null, row.nombre, row.categoria, supplierIds, priceCents, costCents, null, null, stockMinimum, quickAccess, false)
+          : new CreateWeightProductInput(barcode, null, row.nombre, row.categoria, supplierIds, priceCents, costCents, stockMinimum, quickAccess, false);
 
       const result = await this.createProduct.execute(input);
       if (result instanceof BarcodeAlreadyInUse) {
@@ -151,6 +153,10 @@ export class ImportProductsController {
       }
       if (result instanceof SupplierNotFound) {
         rejected.push({ row: rowNumber, name: row.nombre, reason: 'no se pudo asignar el proveedor' });
+        continue;
+      }
+      if (result instanceof NameAlreadyInUse) {
+        rejected.push({ row: rowNumber, name: row.nombre, reason: `ya existe un producto con el mismo nombre («${result.existingName}»)` });
         continue;
       }
       if (result instanceof ShortCodeAlreadyInUse) {

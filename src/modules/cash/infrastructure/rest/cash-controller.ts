@@ -1,4 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { CashSessionRepository } from '#modules/cash/ports/cash-session-repository.js';
 import { z } from 'zod';
 
 import { exhaustive } from '#shared/domain/exhaustive.js';
@@ -45,7 +46,7 @@ const openDto = z.object({
 });
 
 const movementDto = z.object({
-  kind: z.enum(['withdrawal', 'expense']),
+  kind: z.enum(['withdrawal', 'expense', 'deposit']),
   amountCents: z.number().int().positive(),
   concept: z.string().min(1),
   userId: z.string().min(1).default('encargado'),
@@ -77,6 +78,7 @@ function toBreakdownResponse(breakdown: CashBreakdown): Record<string, unknown> 
     cashAbonosCents: breakdown.cashAbonosCents,
     withdrawalsCents: breakdown.withdrawalsCents,
     expensesCents: breakdown.expensesCents,
+    depositsCents: breakdown.depositsCents,
     currentCashCents: breakdown.currentCashCents,
   };
 }
@@ -99,7 +101,14 @@ export class CashController {
     private readonly registerCashMovement: RegisterCashMovement,
     private readonly closeCashSession: CloseCashSession,
     private readonly printCloseSummary: PrintCloseSummary,
+    private readonly cashSessionRepository: CashSessionRepository,
   ) {}
+
+  // Historial de cierres: hasta 30 cortes anteriores, del más reciente atrás.
+  async history(_request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const sessions = await this.cashSessionRepository.listClosed(30);
+    await reply.status(200).send(sessions.map(toSessionResponse));
+  }
 
   async printLastClose(_request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const result = await this.printCloseSummary.execute();

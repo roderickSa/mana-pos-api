@@ -46,7 +46,13 @@ const updateUserDto = z.object({
 });
 
 function toUserResponse(user: User): Record<string, unknown> {
-  return { id: user.id, name: user.name, role: user.role, active: user.active };
+  return {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    active: user.active,
+    lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+  };
 }
 
 function idParam(request: FastifyRequest): string {

@@ -24,6 +24,19 @@ import { RegisterStockAdjustment } from '#modules/inventory/use-cases/register-s
 import { RegisterStockEntry } from '#modules/inventory/use-cases/register-stock-entry/register-stock-entry.js';
 import { SetStockCount } from '#modules/inventory/use-cases/set-stock-count/set-stock-count.js';
 import { SqliteSupplierLookup } from '#modules/catalog/infrastructure/services/sqlite-supplier-lookup.js';
+import { SqliteBarcodeAliasRepository } from '#modules/catalog/infrastructure/repositories/sqlite-barcode-alias-repository.js';
+import { SqliteProductMerger } from '#modules/catalog/infrastructure/repositories/sqlite-product-merger.js';
+import {
+  AddProductBarcode,
+  ListProductBarcodes,
+  RemoveProductBarcode,
+} from '#modules/catalog/use-cases/manage-barcodes/manage-barcodes.js';
+import { MergeProducts } from '#modules/catalog/use-cases/merge-products/merge-products.js';
+import {
+  LinkProductSupplier,
+  UnlinkProductSupplier,
+} from '#modules/catalog/use-cases/manage-product-suppliers/manage-product-suppliers.js';
+import { SqliteProductSupplierLink } from '#modules/catalog/infrastructure/repositories/sqlite-product-supplier-link.js';
 import { SqliteSupplierRepository } from '#modules/suppliers/infrastructure/repositories/sqlite-supplier-repository.js';
 import { registerSupplierRoutes } from '#modules/suppliers/infrastructure/rest/suppliers-routes.js';
 import { CreateSupplier } from '#modules/suppliers/use-cases/create-supplier/create-supplier.js';
@@ -109,8 +122,18 @@ import {
   SetProductExpiry,
 } from '#modules/inventory/use-cases/expiry/expiry.js';
 import { ExpiryAlertService } from '#modules/settings/use-cases/expiry-alert-service.js';
+import { IgvService } from '#modules/settings/use-cases/igv-service.js';
 import { registerCashRoutes } from '#modules/cash/infrastructure/rest/cash-routes.js';
 import { OpenCashSession } from '#modules/cash/use-cases/open-cash-session/open-cash-session.js';
+import { SqlitePurchaseOrderRepository } from '#modules/purchases/infrastructure/repositories/sqlite-purchase-order-repository.js';
+import { SqlitePurchaseProductLookup } from '#modules/purchases/infrastructure/services/sqlite-purchase-product-lookup.js';
+import { registerPurchasesRoutes } from '#modules/purchases/infrastructure/rest/purchases-routes.js';
+import { CreatePurchaseOrder } from '#modules/purchases/use-cases/create-purchase-order/create-purchase-order.js';
+import { ListPurchaseOrders } from '#modules/purchases/use-cases/list-purchase-orders/list-purchase-orders.js';
+import { GetPurchaseOrder } from '#modules/purchases/use-cases/get-purchase-order/get-purchase-order.js';
+import { CancelPurchaseOrder } from '#modules/purchases/use-cases/cancel-purchase-order/cancel-purchase-order.js';
+import { ReceivePurchaseOrder } from '#modules/purchases/use-cases/receive-purchase-order/receive-purchase-order.js';
+import { InventoryStockReceiver } from '#modules/purchases/infrastructure/services/inventory-stock-receiver.js';
 import { GetCashStatus } from '#modules/cash/use-cases/get-cash-status/get-cash-status.js';
 import { RegisterCashMovement } from '#modules/cash/use-cases/register-cash-movement/register-cash-movement.js';
 import { CloseCashSession } from '#modules/cash/use-cases/close-cash-session/close-cash-session.js';
@@ -150,6 +173,7 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
   const setProductImage = new SetProductImage(productRepository, imageStore, timeManager);
   const removeProductImage = new RemoveProductImage(productRepository, imageStore, timeManager);
 
+  const barcodeAliasRepository = new SqliteBarcodeAliasRepository(db);
   const catalogController = new CatalogController(
     createProduct,
     updateProduct,
@@ -157,6 +181,12 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     getProductByBarcode,
     setProductImage,
     removeProductImage,
+    new ListProductBarcodes(barcodeAliasRepository),
+    new AddProductBarcode(productRepository, barcodeAliasRepository, timeManager),
+    new RemoveProductBarcode(barcodeAliasRepository),
+    new MergeProducts(productRepository, new SqliteProductMerger(db), timeManager),
+    new LinkProductSupplier(productRepository, supplierLookup, new SqliteProductSupplierLink(db)),
+    new UnlinkProductSupplier(new SqliteProductSupplierLink(db)),
   );
 
   const inventoryRepository = new SqliteInventoryRepository(db);
@@ -179,6 +209,7 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
 
   const settingsRepository = new SqliteSettingsRepository(db);
   const expiryAlertService = new ExpiryAlertService(settingsRepository);
+  const igvService = new IgvService(settingsRepository);
   const getExpiringProducts = new GetExpiringProducts(inventoryRepository, timeManager);
   const setProductExpiry = new SetProductExpiry(inventoryRepository);
 
@@ -267,12 +298,13 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     registerCashMovement,
     closeCashSession,
     printCloseSummary,
+    cashSessionRepository,
   );
   const cashSessionLookup = new CashModuleSessionLookup(cashSessionRepository);
 
   const userRepository = new SqliteUserRepository(db);
   const pinHasher = new ScryptPinHasher();
-  const loginWithPin = new LoginWithPin(userRepository, pinHasher);
+  const loginWithPin = new LoginWithPin(userRepository, pinHasher, timeManager);
   const verifyManagerPin = new VerifyManagerPin(userRepository, pinHasher);
   const createUser = new CreateUser(userRepository, pinHasher, idGenerator, timeManager);
   const updateUser = new UpdateUser(userRepository, pinHasher);
@@ -306,6 +338,7 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     searchTickets,
     reprintReceipt,
     getTicketDetail,
+    igvService,
   );
 
   server.setErrorHandler((error: unknown, _request, reply) => {
@@ -351,6 +384,17 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     new UpdateCategory(categoryRepository),
     categoryRepository,
   );
+  const purchaseOrderRepository = new SqlitePurchaseOrderRepository(db);
+  const purchaseProductLookup = new SqlitePurchaseProductLookup(db);
+  registerPurchasesRoutes(
+    server,
+    new CreatePurchaseOrder(purchaseOrderRepository, purchaseProductLookup, supplierLookup, idGenerator, timeManager),
+    new ListPurchaseOrders(purchaseOrderRepository),
+    new GetPurchaseOrder(purchaseOrderRepository),
+    new CancelPurchaseOrder(purchaseOrderRepository, timeManager),
+    new ReceivePurchaseOrder(purchaseOrderRepository, new InventoryStockReceiver(registerStockEntry), timeManager),
+  );
+
   registerCatalogRoutes(server, catalogController, importProductsController, categoriesController);
   registerInventoryRoutes(server, inventoryController);
   registerSupplierRoutes(server, createSupplier, listSuppliers, updateSupplier);
@@ -359,7 +403,7 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
   registerCreditRoutes(server, creditController);
   registerCashRoutes(server, cashController);
   registerUsersRoutes(server, usersController);
-  registerSettingsRoutes(server, receiptConfigService, expiryAlertService);
+  registerSettingsRoutes(server, receiptConfigService, expiryAlertService, igvService);
 
   // Producción local: si el front está compilado, la API lo sirve en el mismo
   // puerto (un solo origen, sin Vite). Rutas no-API caen al index (SPA).

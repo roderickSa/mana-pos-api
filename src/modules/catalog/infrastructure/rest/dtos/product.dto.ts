@@ -2,45 +2,68 @@ import { z } from 'zod';
 
 import { UnitProduct, type Product } from '#modules/catalog/domain/product.js';
 
-export const createProductDto = z.discriminatedUnion('saleType', [
-  z.object({
-    saleType: z.literal('unit'),
+// El empaque viene completo o no viene: caja de N unidades a un costo dado.
+const packFields = {
+  packSize: z.number().int().min(1).nullish(),
+  packCostCents: z.number().int().positive().nullish(),
+};
+
+function packIsComplete(body: {
+  packSize?: number | null | undefined;
+  packCostCents?: number | null | undefined;
+}): boolean {
+  return (body.packSize == null) === (body.packCostCents == null);
+}
+
+const PACK_INCOMPLETE_MESSAGE = 'packSize y packCostCents van juntos (ambos o ninguno)';
+
+export const createProductDto = z
+  .discriminatedUnion('saleType', [
+    z.object({
+      saleType: z.literal('unit'),
+      barcode: z.string().min(1).nullish(),
+      shortCode: z.string().regex(/^\d{1,3}$/).nullish(),
+      name: z.string().min(1),
+      category: z.string().min(1),
+      supplierIds: z.array(z.string().min(1)).default([]),
+      priceCents: z.number().int().positive(),
+      costCents: z.number().int().nonnegative(),
+      ...packFields,
+      stockMinimum: z.number().int().nonnegative().default(0),
+      quickAccess: z.boolean().default(false),
+      allowDuplicateName: z.boolean().default(false),
+    }),
+    z.object({
+      saleType: z.literal('weight'),
+      barcode: z.string().min(1).nullish(),
+      shortCode: z.string().regex(/^\d{1,3}$/).nullish(),
+      name: z.string().min(1),
+      category: z.string().min(1),
+      supplierIds: z.array(z.string().min(1)).default([]),
+      pricePerKgCents: z.number().int().positive(),
+      costPerKgCents: z.number().int().nonnegative(),
+      stockMinimumGrams: z.number().int().nonnegative().default(0),
+      quickAccess: z.boolean().default(false),
+      allowDuplicateName: z.boolean().default(false),
+    }),
+  ])
+  .refine((body) => body.saleType !== 'unit' || packIsComplete(body), PACK_INCOMPLETE_MESSAGE);
+
+export const updateProductDto = z
+  .object({
     barcode: z.string().min(1).nullish(),
     shortCode: z.string().regex(/^\d{1,3}$/).nullish(),
     name: z.string().min(1),
     category: z.string().min(1),
-    supplierId: z.string().min(1).nullish(),
+    supplierIds: z.array(z.string().min(1)).default([]),
     priceCents: z.number().int().positive(),
     costCents: z.number().int().nonnegative(),
-    stockMinimum: z.number().int().nonnegative().default(0),
-    quickAccess: z.boolean().default(false),
-  }),
-  z.object({
-    saleType: z.literal('weight'),
-    barcode: z.string().min(1).nullish(),
-    shortCode: z.string().regex(/^\d{1,3}$/).nullish(),
-    name: z.string().min(1),
-    category: z.string().min(1),
-    supplierId: z.string().min(1).nullish(),
-    pricePerKgCents: z.number().int().positive(),
-    costPerKgCents: z.number().int().nonnegative(),
-    stockMinimumGrams: z.number().int().nonnegative().default(0),
-    quickAccess: z.boolean().default(false),
-  }),
-]);
-
-export const updateProductDto = z.object({
-  barcode: z.string().min(1).nullish(),
-  shortCode: z.string().regex(/^\d{1,3}$/).nullish(),
-  name: z.string().min(1),
-  category: z.string().min(1),
-  supplierId: z.string().min(1).nullish(),
-  priceCents: z.number().int().positive(),
-  costCents: z.number().int().nonnegative(),
-  stockMinimum: z.number().int().nonnegative(),
-  active: z.boolean(),
-  quickAccess: z.boolean(),
-});
+    ...packFields,
+    stockMinimum: z.number().int().nonnegative(),
+    active: z.boolean(),
+    quickAccess: z.boolean(),
+  })
+  .refine(packIsComplete, PACK_INCOMPLETE_MESSAGE);
 
 export const setProductImageDto = z.object({
   // data URL: data:image/png;base64,....
@@ -59,6 +82,7 @@ export function parseImageDataUrl(imageBase64: string): { data: Buffer; extensio
 export const searchProductsDto = z.object({
   query: z.string().optional(),
   category: z.string().optional(),
+  supplier: z.string().optional(),
   orderBy: z.enum(['sales', 'name']).optional(),
   page: z.coerce.number().int().positive().optional(),
   perPage: z.coerce.number().int().positive().max(100).optional(),
@@ -67,6 +91,10 @@ export const searchProductsDto = z.object({
     .optional()
     .transform((value) => value === 'true'),
   lowStock: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
+  noCost: z
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
@@ -83,7 +111,7 @@ export function toProductResponse(product: Product): Record<string, unknown> {
     shortCode: product.shortCode,
     name: product.name,
     category: product.category,
-    supplierId: product.supplierId,
+    supplierIds: product.supplierIds,
     imagePath: product.imagePath,
     active: product.active,
     quickAccess: product.quickAccess,
@@ -95,6 +123,8 @@ export function toProductResponse(product: Product): Record<string, unknown> {
       saleType: 'unit',
       priceCents: product.priceCents,
       costCents: product.costCents,
+      packSize: product.packSize,
+      packCostCents: product.packCostCents,
       stockUnits: product.stockUnits,
       stockMinimum: product.stockMinimum,
     };

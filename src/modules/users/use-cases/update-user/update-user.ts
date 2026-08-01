@@ -53,7 +53,7 @@ export class UpdateUser {
       pinHash = this.pinHasher.hash(input.newPin);
     }
 
-    const updated = new User(existing.id, input.name, pinHash, input.role, input.active, existing.createdAt);
+    const updated = new User(existing.id, input.name, pinHash, input.role, input.active, existing.createdAt, existing.lastLoginAt);
     await this.userRepository.save(updated);
     return new UserUpdated(updated);
   }

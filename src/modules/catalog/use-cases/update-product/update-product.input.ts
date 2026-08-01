@@ -9,9 +9,12 @@ export class UpdateProductInput {
     readonly shortCode: Nullable<string>,
     readonly name: string,
     readonly category: string,
-    readonly supplierId: Nullable<string>,
+    readonly supplierIds: string[],
     readonly priceCents: number,
     readonly costCents: number,
+    // Solo aplican a productos por unidad; para pesables llegan null.
+    readonly packSize: Nullable<number>,
+    readonly packCostCents: Nullable<number>,
     readonly stockMinimum: number,
     readonly active: boolean,
     readonly quickAccess: boolean,

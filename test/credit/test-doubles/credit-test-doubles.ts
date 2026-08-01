@@ -49,6 +49,23 @@ export class CreditLedgerForTesting implements CreditLedger {
     return result;
   }
 
+  async debtSinceOf(customerIds: string[]): Promise<Map<string, Date>> {
+    const result = new Map<string, Date>();
+    for (const id of customerIds) {
+      let running = 0;
+      for (const entry of this.entries.filter((item) => item.customerId === id)) {
+        const next = running + (entry.kind === 'charge' ? entry.amountCents : -entry.amountCents);
+        if (running <= 0 && next > 0) {
+          result.set(id, entry.createdAt);
+        } else if (next <= 0) {
+          result.delete(id);
+        }
+        running = next;
+      }
+    }
+    return result;
+  }
+
   async chargeForTicket(ticketId: string): Promise<Nullable<CreditEntry>> {
     return this.entries.find((entry) => entry.ticketId === ticketId && entry.kind === 'charge') ?? null;
   }

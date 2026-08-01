@@ -1,5 +1,5 @@
 import type { Nullable } from '#shared/domain/nullable.js';
-import { normalizeSearchText } from '#modules/catalog/domain/normalize-search-text.js';
+import { normalizeSearchText } from '#shared/domain/normalize-search-text.js';
 import type { Product } from '#modules/catalog/domain/product.js';
 import type { ProductRepository } from '#modules/catalog/ports/product-repository.js';
 import { SearchProductsParams } from '#modules/catalog/ports/search-products-params.js';
@@ -19,8 +19,10 @@ export class SearchProducts {
     const params = new SearchProductsParams(
       this.normalizeQuery(input.query),
       input.category,
+      input.supplierId,
       input.onlyQuickAccess,
       input.onlyLowStock,
+      input.onlyMissingCost,
       input.includeInactive,
       input.orderBySales,
       input.limit,

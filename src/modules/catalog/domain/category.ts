@@ -1,4 +1,4 @@
-import { normalizeSearchText } from '#modules/catalog/domain/normalize-search-text.js';
+import { normalizeSearchText } from '#shared/domain/normalize-search-text.js';
 
 export class Category {
   constructor(

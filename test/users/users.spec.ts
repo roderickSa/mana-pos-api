@@ -48,7 +48,7 @@ function build() {
   const repository = new UserRepositoryForTesting();
   const hasher = new ScryptPinHasher();
   const createUser = new CreateUser(repository, hasher, new IdGeneratorForTesting(), new TimeManagerForTesting());
-  const login = new LoginWithPin(repository, hasher);
+  const login = new LoginWithPin(repository, hasher, new TimeManagerForTesting());
   const verifyManager = new VerifyManagerPin(repository, hasher);
   return { repository, createUser, login, verifyManager };
 }

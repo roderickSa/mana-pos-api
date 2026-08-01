@@ -100,8 +100,19 @@ export class SqliteInventoryRepository implements InventoryRepository {
   async searchMovements(params: MovementSearchParams): Promise<StockMovementPage> {
     const conditions: SQL[] = [];
     if (params.productQuery !== null) {
-      const pattern = `%${params.productQuery.toLowerCase()}%`;
-      conditions.push(sql`${products.normalizedName} LIKE ${pattern}`);
+      // Un query numérico largo es un código de barras: match exacto contra
+      // el principal o cualquiera de los alias del producto.
+      if (/^\d{6,}$/.test(params.productQuery)) {
+        conditions.push(
+          sql`(${products.barcode} = ${params.productQuery} OR EXISTS (
+            SELECT 1 FROM product_barcodes pb
+            WHERE pb.product_id = ${products.id} AND pb.barcode = ${params.productQuery}
+          ))`,
+        );
+      } else {
+        const pattern = `%${params.productQuery.toLowerCase()}%`;
+        conditions.push(sql`${products.normalizedName} LIKE ${pattern}`);
+      }
     }
     if (params.kind !== null) {
       conditions.push(eq(stockMovements.type, params.kind));

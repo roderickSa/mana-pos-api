@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 // Dinero siempre en céntimos de sol (enteros). Peso siempre en gramos (enteros).
 // Para productos por unidad, stock/cantidades son unidades; por peso, gramos.
@@ -29,7 +29,6 @@ export const products = sqliteTable(
     name: text('name').notNull(),
     normalizedName: text('normalized_name').notNull(),
     category: text('category').notNull(),
-    supplierId: text('supplier_id').references(() => suppliers.id),
     imagePath: text('image_path'),
     saleType: text('sale_type', { enum: ['unit', 'weight'] }).notNull(),
     priceCents: integer('price_cents').notNull(),
@@ -38,6 +37,10 @@ export const products = sqliteTable(
     stockMinimum: integer('stock_minimum').notNull().default(0),
     // Fecha de vencimiento del stock actual (una por producto, no por lote).
     expiryDate: integer('expiry_date', { mode: 'timestamp_ms' }),
+    // Compra por empaque (solo productos por unidad): 1 caja/paquete = packSize
+    // unidades a packCostCents; costCents guarda siempre el costo por unidad.
+    packSize: integer('pack_size'),
+    packCostCents: integer('pack_cost_cents'),
     active: integer('active', { mode: 'boolean' }).notNull().default(true),
     quickAccess: integer('quick_access', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
@@ -47,6 +50,78 @@ export const products = sqliteTable(
     index('products_normalized_name_idx').on(table.normalizedName),
     index('products_category_idx').on(table.category),
   ],
+);
+
+// Códigos de barras ADICIONALES (alias): el principal vive en products.barcode.
+// Un mismo producto puede venir con varios EAN según el lote o presentación.
+export const productBarcodes = sqliteTable(
+  'product_barcodes',
+  {
+    barcode: text('barcode').primaryKey(),
+    productId: text('product_id')
+      .notNull()
+      .references(() => products.id),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [index('product_barcodes_product_idx').on(table.productId)],
+);
+
+// Un producto puede comprarse a varios proveedores (o a ninguno: costo directo).
+export const productSuppliers = sqliteTable(
+  'product_suppliers',
+  {
+    productId: text('product_id')
+      .notNull()
+      .references(() => products.id),
+    supplierId: text('supplier_id')
+      .notNull()
+      .references(() => suppliers.id),
+  },
+  (table) => [
+    primaryKey({ columns: [table.productId, table.supplierId] }),
+    index('product_suppliers_supplier_idx').on(table.supplierId),
+  ],
+);
+
+export const purchaseOrders = sqliteTable(
+  'purchase_orders',
+  {
+    id: text('id').primaryKey(),
+    // Correlativo humano: la orden se nombra "Orden #4", no por fecha.
+    number: integer('number').notNull().default(0),
+    supplierId: text('supplier_id')
+      .notNull()
+      .references(() => suppliers.id),
+    status: text('status', { enum: ['open', 'partial', 'received', 'cancelled'] }).notNull(),
+    notes: text('notes'),
+    createdBy: text('created_by').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [index('purchase_orders_status_idx').on(table.status)],
+);
+
+export const purchaseOrderLines = sqliteTable(
+  'purchase_order_lines',
+  {
+    id: text('id').primaryKey(),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => purchaseOrders.id),
+    productId: text('product_id')
+      .notNull()
+      .references(() => products.id),
+    description: text('description').notNull(),
+    saleType: text('sale_type', { enum: ['unit', 'weight'] }).notNull(),
+    // Unidades para productos por unidad, gramos para pesables (como el resto).
+    quantityOrdered: integer('quantity_ordered').notNull(),
+    quantityReceived: integer('quantity_received').notNull().default(0),
+    // Costo pactado por unidad o por kg según el tipo de venta.
+    unitCostCents: integer('unit_cost_cents').notNull(),
+    packSize: integer('pack_size'),
+    packCostCents: integer('pack_cost_cents'),
+  },
+  (table) => [index('purchase_order_lines_order_idx').on(table.orderId)],
 );
 
 export const stockMovements = sqliteTable(
@@ -80,6 +155,7 @@ export const users = sqliteTable('users', {
   role: text('role', { enum: ['manager', 'cashier'] }).notNull(),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
 });
 
 export const cashSessions = sqliteTable(
@@ -106,7 +182,7 @@ export const cashMovements = sqliteTable(
     cashSessionId: text('cash_session_id')
       .notNull()
       .references(() => cashSessions.id),
-    type: text('type', { enum: ['withdrawal', 'expense'] }).notNull(),
+    type: text('type', { enum: ['withdrawal', 'expense', 'deposit'] }).notNull(),
     amountCents: integer('amount_cents').notNull(),
     concept: text('concept').notNull(),
     userId: text('user_id').notNull(),

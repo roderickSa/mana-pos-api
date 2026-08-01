@@ -62,7 +62,7 @@ export class TicketRepositoryForTesting implements TicketRepository {
     return new TicketsPage(
       items,
       all.length,
-      new SalesSummary(charged.length, charged.reduce((sum, t) => sum + t.totalCents, 0), [], []),
+      new SalesSummary(charged.length, charged.reduce((sum, t) => sum + t.totalCents, 0), [], [], []),
     );
   }
 

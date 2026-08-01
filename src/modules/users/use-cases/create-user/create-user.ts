@@ -51,6 +51,7 @@ export class CreateUser {
       input.role,
       true,
       this.timeManager.now(),
+      null,
     );
     await this.userRepository.save(user);
     return new UserCreated(user);

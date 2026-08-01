@@ -1,5 +1,5 @@
 import type { Nullable } from '#shared/domain/nullable.js';
-import { normalizeSearchText } from '#modules/catalog/domain/normalize-search-text.js';
+import { normalizeSearchText } from '#shared/domain/normalize-search-text.js';
 import { UnitProduct, WeightProduct } from '#modules/catalog/domain/product.js';
 
 interface UnitProductMotherParams {
@@ -8,10 +8,12 @@ interface UnitProductMotherParams {
   shortCode: Nullable<string>;
   name: string;
   category: string;
-  supplierId: Nullable<string>;
+  supplierIds: string[];
   imagePath: Nullable<string>;
   priceCents: number;
   costCents: number;
+  packSize: Nullable<number>;
+  packCostCents: Nullable<number>;
   stockUnits: number;
   stockMinimum: number;
   active: boolean;
@@ -27,10 +29,12 @@ export function unitProductMother(params: Partial<UnitProductMotherParams> = {})
     name,
     normalizeSearchText(name),
     params.category ?? 'bebidas',
-    params.supplierId !== undefined ? params.supplierId : null,
+    params.supplierIds ?? [],
     params.imagePath !== undefined ? params.imagePath : null,
     params.priceCents ?? 350,
     params.costCents ?? 280,
+    params.packSize !== undefined ? params.packSize : null,
+    params.packCostCents !== undefined ? params.packCostCents : null,
     params.stockUnits ?? 24,
     params.stockMinimum ?? 6,
     params.active ?? true,
@@ -46,7 +50,7 @@ interface WeightProductMotherParams {
   shortCode: Nullable<string>;
   name: string;
   category: string;
-  supplierId: Nullable<string>;
+  supplierIds: string[];
   imagePath: Nullable<string>;
   pricePerKgCents: number;
   costPerKgCents: number;
@@ -67,7 +71,7 @@ export function weightProductMother(
     name,
     normalizeSearchText(name),
     params.category ?? 'frutas-verduras',
-    params.supplierId !== undefined ? params.supplierId : null,
+    params.supplierIds ?? [],
     params.imagePath !== undefined ? params.imagePath : null,
     params.pricePerKgCents ?? 450,
     params.costPerKgCents ?? 300,

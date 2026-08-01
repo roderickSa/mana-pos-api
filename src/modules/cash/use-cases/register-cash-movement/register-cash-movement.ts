@@ -6,7 +6,7 @@ import { GetCashStatus } from '#modules/cash/use-cases/get-cash-status/get-cash-
 
 export class RegisterCashMovementInput {
   constructor(
-    readonly kind: 'withdrawal' | 'expense',
+    readonly kind: 'withdrawal' | 'expense' | 'deposit',
     readonly amountCents: number,
     readonly concept: string,
     readonly userId: string,
@@ -46,7 +46,7 @@ export class RegisterCashMovement {
     }
 
     const breakdown = await this.getCashStatus.buildBreakdown(session);
-    if (input.amountCents > breakdown.currentCashCents) {
+    if (input.kind !== 'deposit' && input.amountCents > breakdown.currentCashCents) {
       return new MovementExceedsCash(breakdown.currentCashCents);
     }
 

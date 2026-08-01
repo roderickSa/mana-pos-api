@@ -1,6 +1,7 @@
 import type { IdGenerator } from '#shared/ports/id-generator.js';
 import type { TimeManager } from '#shared/ports/time-manager.js';
-import { normalizeSearchText } from '#modules/catalog/domain/normalize-search-text.js';
+import { normalizeSearchText } from '#shared/domain/normalize-search-text.js';
+import { unitCostFromPack } from '#modules/catalog/domain/pack-pricing.js';
 import { UnitProduct, WeightProduct, type Product } from '#modules/catalog/domain/product.js';
 import type { ProductRepository } from '#modules/catalog/ports/product-repository.js';
 import {
@@ -9,6 +10,7 @@ import {
 } from '#modules/catalog/use-cases/create-product/create-product.input.js';
 import {
   BarcodeAlreadyInUse,
+  NameAlreadyInUse,
   ProductCreated,
   ShortCodeAlreadyInUse,
   SupplierNotFound,
@@ -39,8 +41,19 @@ export class CreateProduct {
       }
     }
 
-    if (input.supplierId !== null && !(await this.supplierLookup.exists(input.supplierId))) {
-      return new SupplierNotFound(input.supplierId);
+    for (const supplierId of input.supplierIds) {
+      if (!(await this.supplierLookup.exists(supplierId))) {
+        return new SupplierNotFound(supplierId);
+      }
+    }
+
+    if (!input.allowDuplicateName) {
+      const sameName = await this.productRepository.findByNormalizedName(
+        normalizeSearchText(input.name),
+      );
+      if (sameName !== null) {
+        return new NameAlreadyInUse(sameName.id, sameName.name);
+      }
     }
 
     const product = this.buildProduct(input);
@@ -54,6 +67,11 @@ export class CreateProduct {
     const normalizedName = normalizeSearchText(input.name);
 
     if (input instanceof CreateUnitProductInput) {
+      // Con datos de empaque, el costo unitario se deriva del costo por caja.
+      const costCents =
+        input.packSize !== null && input.packCostCents !== null
+          ? unitCostFromPack(input.packCostCents, input.packSize)
+          : input.costCents;
       return new UnitProduct(
         id,
         input.barcode,
@@ -61,10 +79,12 @@ export class CreateProduct {
         input.name,
         normalizedName,
         input.category,
-        input.supplierId,
+        input.supplierIds,
         null,
         input.priceCents,
-        input.costCents,
+        costCents,
+        input.packSize,
+        input.packCostCents,
         0,
         input.stockMinimum,
         true,
@@ -81,7 +101,7 @@ export class CreateProduct {
       input.name,
       normalizedName,
       input.category,
-      input.supplierId,
+      input.supplierIds,
       null,
       input.pricePerKgCents,
       input.costPerKgCents,

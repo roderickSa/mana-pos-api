@@ -157,6 +157,9 @@ export class EscPosReceiptPrinter implements ReceiptPrinter, CloseSummaryPrinter
       printer.leftRight('Fondo inicial', soles(breakdown.openingCents));
       printer.leftRight('Ventas en efectivo', soles(breakdown.cashSalesCents));
       printer.leftRight('Abonos en efectivo', soles(breakdown.cashAbonosCents));
+      if (breakdown.depositsCents > 0) {
+        printer.leftRight('Ingresos de efectivo', `+${soles(breakdown.depositsCents)}`);
+      }
       printer.leftRight('Retiros', `-${soles(breakdown.withdrawalsCents)}`);
       printer.leftRight('Gastos', `-${soles(breakdown.expensesCents)}`);
       printer.drawLine();

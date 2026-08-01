@@ -71,7 +71,7 @@ export class CashMovement {
   constructor(
     readonly id: string,
     readonly cashSessionId: string,
-    readonly kind: 'withdrawal' | 'expense',
+    readonly kind: 'withdrawal' | 'expense' | 'deposit',
     readonly amountCents: number,
     readonly concept: string,
     readonly userId: string,
@@ -87,13 +87,16 @@ export class CashBreakdown {
     readonly cashAbonosCents: number,
     readonly withdrawalsCents: number,
     readonly expensesCents: number,
+    // Refuerzos de fondo a media jornada (sencillo que entra, no venta).
+    readonly depositsCents: number,
   ) {}
 
   get currentCashCents(): number {
     return (
       this.openingCents +
       this.cashSalesCents +
-      this.cashAbonosCents -
+      this.cashAbonosCents +
+      this.depositsCents -
       this.withdrawalsCents -
       this.expensesCents
     );

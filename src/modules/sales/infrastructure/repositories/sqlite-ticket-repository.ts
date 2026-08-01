@@ -26,6 +26,7 @@ import type { TicketRepository } from '#modules/sales/ports/ticket-repository.js
 import {
   PaymentMethodTotal,
   SalesSummary,
+  SoldByUser,
   TicketListItem,
   TicketsPage,
   VoidedByUser,
@@ -170,6 +171,16 @@ export class SqliteTicketRepository implements TicketRepository {
       .where(voidedWhere)
       .groupBy(sql`LOWER(COALESCE(${tickets.voidedBy}, '-'))`);
 
+    const soldByUserRows = await this.db
+      .select({
+        user: sql<string>`COALESCE(MAX(${tickets.userId}), '-')`,
+        count: sql<number>`COUNT(*)`,
+        total: sql<number>`COALESCE(SUM(${tickets.totalCents}), 0)`,
+      })
+      .from(tickets)
+      .where(chargedWhere)
+      .groupBy(sql`LOWER(${tickets.userId})`);
+
     return new TicketsPage(
       rows.map(
         (row) =>
@@ -189,6 +200,7 @@ export class SqliteTicketRepository implements TicketRepository {
         chargedRows[0]?.total ?? 0,
         byMethodRows.map((row) => new PaymentMethodTotal(row.method, row.amount)),
         voidedByUserRows.map((row) => new VoidedByUser(row.user, row.count, row.total)),
+        soldByUserRows.map((row) => new SoldByUser(row.user, row.count, row.total)),
       ),
     );
   }

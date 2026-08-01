@@ -99,6 +99,48 @@
       "when": 1785555800000,
       "tag": "0013_expiry-date",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1785555900000,
+      "tag": "0014_pack-pricing",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1785556000000,
+      "tag": "0015_purchase-orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1785556100000,
+      "tag": "0016_product-suppliers",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1785556200000,
+      "tag": "0017_product-barcodes",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1785556300000,
+      "tag": "0018_order-number",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1785556400000,
+      "tag": "0019_last-login",
+      "breakpoints": true
     }
   ]
 }

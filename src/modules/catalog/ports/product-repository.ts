@@ -7,6 +7,8 @@ export interface ProductRepository {
   findById(id: string): Promise<Nullable<Product>>;
   findByBarcode(barcode: string): Promise<Nullable<Product>>;
   findByShortCode(shortCode: string): Promise<Nullable<Product>>;
+  // Para detectar duplicados al crear: mismo nombre normalizado.
+  findByNormalizedName(normalizedName: string): Promise<Nullable<Product>>;
   search(params: SearchProductsParams): Promise<Product[]>;
   // Total de productos que cumplen los filtros, ignorando limit/offset.
   count(params: SearchProductsParams): Promise<number>;

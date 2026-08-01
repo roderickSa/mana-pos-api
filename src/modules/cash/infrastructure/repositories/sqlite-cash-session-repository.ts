@@ -69,6 +69,16 @@ export class SqliteCashSessionRepository implements CashSessionRepository {
     const row = rows[0];
     return row === undefined ? null : toSession(row);
   }
+
+  async listClosed(limit: number): Promise<CashSession[]> {
+    const rows = await this.db
+      .select()
+      .from(cashSessions)
+      .where(eq(cashSessions.status, 'closed'))
+      .orderBy(desc(cashSessions.closedAt))
+      .limit(limit);
+    return rows.map(toSession);
+  }
 }
 
 function toSession(row: SessionRow): CashSession {

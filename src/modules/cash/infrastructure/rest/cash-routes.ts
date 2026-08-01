@@ -7,6 +7,7 @@ export function registerCashRoutes(server: FastifyInstance, controller: CashCont
   server.post('/cash/open', (request, reply) => controller.open(request, reply));
   server.post('/cash/movements', (request, reply) => controller.movement(request, reply));
   server.post('/cash/close', (request, reply) => controller.close(request, reply));
+  server.get('/cash/history', (request, reply) => controller.history(request, reply));
   server.post('/cash/print-last-close', (request, reply) =>
     controller.printLastClose(request, reply),
   );

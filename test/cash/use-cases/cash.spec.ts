@@ -52,6 +52,10 @@ class CashSessionRepositoryForTesting implements CashSessionRepository {
   async lastClosed(): Promise<Nullable<CashSession>> {
     return [...this.sessions.values()].find((session) => !session.isOpen()) ?? null;
   }
+
+  async listClosed(limit: number): Promise<CashSession[]> {
+    return [...this.sessions.values()].filter((session) => !session.isOpen()).slice(0, limit);
+  }
 }
 
 class CashInflowSourceForTesting implements CashInflowSource {

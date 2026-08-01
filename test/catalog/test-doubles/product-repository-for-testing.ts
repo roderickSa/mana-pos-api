@@ -32,6 +32,15 @@ export class ProductRepositoryForTesting implements ProductRepository {
     return null;
   }
 
+  async findByNormalizedName(normalizedName: string): Promise<Nullable<Product>> {
+    for (const product of this.productsById.values()) {
+      if (product.normalizedName === normalizedName) {
+        return product;
+      }
+    }
+    return null;
+  }
+
   async count(params: SearchProductsParams): Promise<number> {
     return (await this.filtered(params)).length;
   }

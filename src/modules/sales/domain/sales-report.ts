@@ -30,6 +30,15 @@ export class VoidedByUser {
   ) {}
 }
 
+// Ventas cobradas agrupadas por quien las hizo (con dos usuarios ya rinde).
+export class SoldByUser {
+  constructor(
+    readonly user: string,
+    readonly count: number,
+    readonly totalCents: number,
+  ) {}
+}
+
 // Resumen del período filtrado: solo ventas cobradas (las anuladas no suman).
 export class SalesSummary {
   constructor(
@@ -37,6 +46,7 @@ export class SalesSummary {
     readonly chargedTotalCents: number,
     readonly byMethod: PaymentMethodTotal[],
     readonly voidedByUser: VoidedByUser[],
+    readonly soldByUser: SoldByUser[],
   ) {}
 }
 
