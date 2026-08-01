@@ -24,8 +24,15 @@ import {
   registerEntryDto,
   searchMovementsDto,
   setCountDto,
+  setExpiryDto,
   toMovementResponse,
 } from '#modules/inventory/infrastructure/rest/dtos/inventory.dto.js';
+import {
+  GetExpiringProducts,
+  SetProductExpiry,
+  SetProductExpiryInput,
+} from '#modules/inventory/use-cases/expiry/expiry.js';
+import type { ExpiryAlertService } from '#modules/settings/use-cases/expiry-alert-service.js';
 import { SearchMovements } from '#modules/inventory/use-cases/search-movements/search-movements.js';
 import { SearchMovementsInput } from '#modules/inventory/use-cases/search-movements/search-movements.input.js';
 
@@ -36,7 +43,38 @@ export class InventoryController {
     private readonly setStockCount: SetStockCount,
     private readonly getKardex: GetKardex,
     private readonly searchMovements: SearchMovements,
+    private readonly getExpiringProducts: GetExpiringProducts,
+    private readonly setProductExpiry: SetProductExpiry,
+    private readonly expiryAlertService: ExpiryAlertService,
   ) {}
+
+  async expiring(_request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const days = await this.expiryAlertService.getDays();
+    const result = await this.getExpiringProducts.execute(days);
+    const now = new Date();
+    await reply.status(200).send({
+      alertDays: result.alertDays,
+      items: result.items.map((item) => ({
+        productId: item.productId,
+        name: item.name,
+        saleType: item.saleType,
+        stockQuantity: item.stockQuantity,
+        expiryDate: item.expiryDate.toISOString(),
+        daysLeft: item.daysLeft(now),
+      })),
+    });
+  }
+
+  async expiry(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const body = setExpiryDto.parse(request.body);
+    await this.setProductExpiry.execute(
+      new SetProductExpiryInput(
+        body.productId,
+        body.expiryDate === null ? null : new Date(`${body.expiryDate}T12:00:00`),
+      ),
+    );
+    await reply.status(200).send({ ok: true });
+  }
 
   async movements(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const query = searchMovementsDto.parse(request.query);
@@ -66,7 +104,13 @@ export class InventoryController {
   async entry(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const body = registerEntryDto.parse(request.body);
     const result = await this.registerStockEntry.execute(
-      new RegisterStockEntryInput(body.productId, body.quantity, body.userId),
+      new RegisterStockEntryInput(
+        body.productId,
+        body.quantity,
+        body.userId,
+        body.unitCostCents ?? null,
+        body.expiryDate == null ? null : new Date(`${body.expiryDate}T12:00:00`),
+      ),
     );
 
     if (result instanceof StockEntryRegistered) {

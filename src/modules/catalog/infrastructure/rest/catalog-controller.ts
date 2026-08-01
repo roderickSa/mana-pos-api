@@ -164,6 +164,7 @@ export class CatalogController {
         query.query ?? null,
         query.category ?? null,
         query.quickAccess,
+        query.lowStock,
         query.includeInactive,
         query.orderBy === 'sales',
         paginated ? perPage : 50,

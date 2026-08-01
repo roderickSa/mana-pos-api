@@ -5,6 +5,9 @@ import {
   ReceiptConfigService,
   UpdateReceiptConfigInput,
 } from '#modules/settings/use-cases/receipt-config-service.js';
+import { ExpiryAlertService } from '#modules/settings/use-cases/expiry-alert-service.js';
+
+const expiryDto = z.object({ days: z.number().int().min(1).max(90) });
 
 const receiptDto = z.object({
   storeName: z.string().min(1).max(40),
@@ -15,7 +18,17 @@ const receiptDto = z.object({
 export function registerSettingsRoutes(
   server: FastifyInstance,
   receiptConfigService: ReceiptConfigService,
+  expiryAlertService: ExpiryAlertService,
 ): void {
+  server.get('/settings/expiry', async (_request, reply) => {
+    await reply.status(200).send({ days: await expiryAlertService.getDays() });
+  });
+
+  server.put('/settings/expiry', async (request, reply) => {
+    const body = expiryDto.parse(request.body);
+    await reply.status(200).send({ days: await expiryAlertService.setDays(body.days) });
+  });
+
   server.get('/settings/receipt', async (_request, reply) => {
     const config = await receiptConfigService.get();
     await reply.status(200).send({

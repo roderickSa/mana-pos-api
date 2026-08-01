@@ -33,6 +33,13 @@ import { SearchMovements } from '#modules/inventory/use-cases/search-movements/s
 import { SearchTickets } from '#modules/sales/use-cases/search-tickets/search-tickets.js';
 import { FsImageStore } from '#modules/catalog/infrastructure/services/fs-image-store.js';
 import { ImportProductsController } from '#modules/catalog/infrastructure/rest/import-products-controller.js';
+import { CategoriesController } from '#modules/catalog/infrastructure/rest/categories-controller.js';
+import { SqliteCategoryRepository } from '#modules/catalog/infrastructure/repositories/sqlite-category-repository.js';
+import {
+  CreateCategory,
+  ListCategories,
+  UpdateCategory,
+} from '#modules/catalog/use-cases/manage-categories/manage-categories.js';
 import {
   RemoveProductImage,
   SetProductImage,
@@ -59,6 +66,7 @@ import { registerSalesRoutes } from '#modules/sales/infrastructure/rest/sales-ro
 import { Checkout } from '#modules/sales/use-cases/checkout/checkout.js';
 import { VoidTicket } from '#modules/sales/use-cases/void-ticket/void-ticket.js';
 import { ReprintReceipt } from '#modules/sales/use-cases/reprint-receipt/reprint-receipt.js';
+import { GetTicketDetail } from '#modules/sales/use-cases/get-ticket-detail/get-ticket-detail.js';
 import {
   EscPosCashDrawer,
   EscPosReceiptPrinter,
@@ -95,6 +103,12 @@ import { VerifyManagerPin } from '#modules/users/use-cases/verify-manager-pin/ve
 import { SqliteCashSessionRepository } from '#modules/cash/infrastructure/repositories/sqlite-cash-session-repository.js';
 import { SqliteCashInflowSource } from '#modules/cash/infrastructure/services/sqlite-cash-inflow-source.js';
 import { CashController } from '#modules/cash/infrastructure/rest/cash-controller.js';
+import { PrintCloseSummary } from '#modules/cash/use-cases/print-close-summary/print-close-summary.js';
+import {
+  GetExpiringProducts,
+  SetProductExpiry,
+} from '#modules/inventory/use-cases/expiry/expiry.js';
+import { ExpiryAlertService } from '#modules/settings/use-cases/expiry-alert-service.js';
 import { registerCashRoutes } from '#modules/cash/infrastructure/rest/cash-routes.js';
 import { OpenCashSession } from '#modules/cash/use-cases/open-cash-session/open-cash-session.js';
 import { GetCashStatus } from '#modules/cash/use-cases/get-cash-status/get-cash-status.js';
@@ -163,12 +177,20 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     listSuppliers,
   );
 
+  const settingsRepository = new SqliteSettingsRepository(db);
+  const expiryAlertService = new ExpiryAlertService(settingsRepository);
+  const getExpiringProducts = new GetExpiringProducts(inventoryRepository, timeManager);
+  const setProductExpiry = new SetProductExpiry(inventoryRepository);
+
   const inventoryController = new InventoryController(
     registerStockEntry,
     registerStockAdjustment,
     setStockCount,
     getKardex,
     searchMovements,
+    getExpiringProducts,
+    setProductExpiry,
+    expiryAlertService,
   );
 
   const server = fastify({ logger: true });
@@ -202,7 +224,6 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     registerAbono,
   );
 
-  const settingsRepository = new SqliteSettingsRepository(db);
   const receiptConfigService = new ReceiptConfigService(settingsRepository);
   const receiptPrinter = realDevices
     ? new EscPosReceiptPrinter(
@@ -234,11 +255,18 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     getCashStatus,
     timeManager,
   );
+  const printCloseSummary = new PrintCloseSummary(
+    cashSessionRepository,
+    getCashStatus,
+    cashInflowSource,
+    receiptPrinter,
+  );
   const cashController = new CashController(
     openCashSession,
     getCashStatus,
     registerCashMovement,
     closeCashSession,
+    printCloseSummary,
   );
   const cashSessionLookup = new CashModuleSessionLookup(cashSessionRepository);
 
@@ -271,7 +299,14 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
   const voidTicket = new VoidTicket(ticketRepository, stockDiscounter, creditGateway, timeManager);
   const searchTickets = new SearchTickets(ticketRepository);
   const reprintReceipt = new ReprintReceipt(ticketRepository, receiptPrinter);
-  const salesController = new SalesController(checkout, voidTicket, searchTickets, reprintReceipt);
+  const getTicketDetail = new GetTicketDetail(ticketRepository);
+  const salesController = new SalesController(
+    checkout,
+    voidTicket,
+    searchTickets,
+    reprintReceipt,
+    getTicketDetail,
+  );
 
   server.setErrorHandler((error: unknown, _request, reply) => {
     if (error instanceof ZodError) {
@@ -309,7 +344,14 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     }
   });
 
-  registerCatalogRoutes(server, catalogController, importProductsController);
+  const categoryRepository = new SqliteCategoryRepository(db);
+  const categoriesController = new CategoriesController(
+    new ListCategories(categoryRepository),
+    new CreateCategory(categoryRepository, timeManager),
+    new UpdateCategory(categoryRepository),
+    categoryRepository,
+  );
+  registerCatalogRoutes(server, catalogController, importProductsController, categoriesController);
   registerInventoryRoutes(server, inventoryController);
   registerSupplierRoutes(server, createSupplier, listSuppliers, updateSupplier);
   registerSalesRoutes(server, salesController);
@@ -317,7 +359,7 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
   registerCreditRoutes(server, creditController);
   registerCashRoutes(server, cashController);
   registerUsersRoutes(server, usersController);
-  registerSettingsRoutes(server, receiptConfigService);
+  registerSettingsRoutes(server, receiptConfigService, expiryAlertService);
 
   // Producción local: si el front está compilado, la API lo sirve en el mismo
   // puerto (un solo origen, sin Vite). Rutas no-API caen al index (SPA).

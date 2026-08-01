@@ -28,6 +28,7 @@ import {
   SalesSummary,
   TicketListItem,
   TicketsPage,
+  VoidedByUser,
   type PaymentMethodName,
 } from '#modules/sales/domain/sales-report.js';
 import type { TicketSearchParams } from '#modules/sales/ports/ticket-search-params.js';
@@ -51,6 +52,7 @@ export class SqliteTicketRepository implements TicketRepository {
       chargedAt: ticket.chargedAt,
       voidedAt: ticket.voidedAt,
       voidedBy: ticket.voidedBy,
+      voidReason: ticket.voidReason,
     };
 
     this.db.transaction((tx) => {
@@ -155,6 +157,19 @@ export class SqliteTicketRepository implements TicketRepository {
       .where(chargedWhere)
       .groupBy(payments.method);
 
+    // Agrupado sin distinguir mayúsculas: "Encargado" y "encargado" son la
+    // misma persona (el nombre viene de registros de distintas épocas).
+    const voidedWhere = and(where, eq(tickets.status, 'voided'));
+    const voidedByUserRows = await this.db
+      .select({
+        user: sql<string>`COALESCE(MAX(${tickets.voidedBy}), '-')`,
+        count: sql<number>`COUNT(*)`,
+        total: sql<number>`COALESCE(SUM(${tickets.totalCents}), 0)`,
+      })
+      .from(tickets)
+      .where(voidedWhere)
+      .groupBy(sql`LOWER(COALESCE(${tickets.voidedBy}, '-'))`);
+
     return new TicketsPage(
       rows.map(
         (row) =>
@@ -173,6 +188,7 @@ export class SqliteTicketRepository implements TicketRepository {
         chargedRows[0]?.count ?? 0,
         chargedRows[0]?.total ?? 0,
         byMethodRows.map((row) => new PaymentMethodTotal(row.method, row.amount)),
+        voidedByUserRows.map((row) => new VoidedByUser(row.user, row.count, row.total)),
       ),
     );
   }
@@ -190,6 +206,7 @@ export class SqliteTicketRepository implements TicketRepository {
       row.chargedAt,
       row.voidedAt,
       row.voidedBy,
+      row.voidReason,
     );
   }
 

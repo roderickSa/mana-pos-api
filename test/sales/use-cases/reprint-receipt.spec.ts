@@ -46,7 +46,7 @@ describe('ReprintReceipt', () => {
   });
 
   it('rejects voided tickets and unknown ids', async () => {
-    await repository.save(chargedTicketMother('ticket-1').void(new Date(), 'encargado'));
+    await repository.save(chargedTicketMother('ticket-1').void(new Date(), 'encargado', 'prueba'));
 
     const voided = await useCase.execute(new ReprintReceiptInput('ticket-1'));
     const missing = await useCase.execute(new ReprintReceiptInput('nope'));

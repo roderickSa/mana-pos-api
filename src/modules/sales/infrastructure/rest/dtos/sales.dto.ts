@@ -57,6 +57,12 @@ export const salesSearchDto = z.object({
 
 export const voidTicketDto = z.object({
   voidedBy: z.string().min(1).default('encargado'),
+  // El motivo es obligatorio: la anulación es auditable y debe explicarse.
+  reason: z
+    .string({ message: 'Indica el motivo de la anulación.' })
+    .trim()
+    .min(3, 'Indica el motivo de la anulación (mínimo 3 letras).')
+    .max(200),
 });
 
 export function toTicketResponse(ticket: Ticket, changeCents: Nullable<number>): Record<string, unknown> {
@@ -66,11 +72,17 @@ export function toTicketResponse(ticket: Ticket, changeCents: Nullable<number>):
     status: ticket.status.name,
     totalCents: ticket.totalCents,
     changeCents,
+    userId: ticket.userId,
+    createdAt: ticket.createdAt.toISOString(),
     chargedAt: ticket.chargedAt?.toISOString() ?? null,
+    voidedAt: ticket.voidedAt?.toISOString() ?? null,
+    voidedBy: ticket.voidedBy,
+    voidReason: ticket.voidReason,
     lines: ticket.lines.map((line) => ({
       description: line.description,
       quantity: line instanceof UnitTicketLine ? line.quantity : null,
       grams: line instanceof UnitTicketLine ? null : line.grams,
+      unitPriceCents: line instanceof UnitTicketLine ? line.unitPriceCents : line.pricePerKgCents,
       totalCents: line.totalCents,
     })),
     payments: ticket.payments.map((payment) => ({

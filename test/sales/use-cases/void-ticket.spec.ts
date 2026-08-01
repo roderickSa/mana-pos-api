@@ -32,7 +32,7 @@ describe('VoidTicket', () => {
   it('voids a charged ticket and reverses the stock', async () => {
     await ticketRepository.save(chargedTicketMother('ticket-1'));
 
-    const result = await useCase.execute(new VoidTicketInput('ticket-1', 'encargado'));
+    const result = await useCase.execute(new VoidTicketInput('ticket-1', 'encargado', 'producto vencido'));
 
     expect(result).toBeInstanceOf(TicketVoided);
     if (!(result instanceof TicketVoided)) return;
@@ -44,15 +44,15 @@ describe('VoidTicket', () => {
   it('is replay-safe: voiding twice does not reverse stock twice', async () => {
     await ticketRepository.save(chargedTicketMother('ticket-1'));
 
-    await useCase.execute(new VoidTicketInput('ticket-1', 'encargado'));
-    const replay = await useCase.execute(new VoidTicketInput('ticket-1', 'encargado'));
+    await useCase.execute(new VoidTicketInput('ticket-1', 'encargado', 'producto vencido'));
+    const replay = await useCase.execute(new VoidTicketInput('ticket-1', 'encargado', 'producto vencido'));
 
     expect(replay).toBeInstanceOf(TicketAlreadyVoided);
     expect(stockDiscounter.reversals).toHaveLength(1);
   });
 
   it('returns TicketNotFound for unknown tickets', async () => {
-    const result = await useCase.execute(new VoidTicketInput('nope', 'encargado'));
+    const result = await useCase.execute(new VoidTicketInput('nope', 'encargado', null));
 
     expect(result).toBeInstanceOf(TicketNotFound);
   });

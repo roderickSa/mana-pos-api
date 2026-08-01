@@ -12,6 +12,13 @@ export const suppliers = sqliteTable('suppliers', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
+export const categories = sqliteTable('categories', {
+  slug: text('slug').primaryKey(),
+  name: text('name').notNull(),
+  active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
 export const products = sqliteTable(
   'products',
   {
@@ -29,6 +36,8 @@ export const products = sqliteTable(
     costCents: integer('cost_cents').notNull(),
     stockQuantity: integer('stock_quantity').notNull().default(0),
     stockMinimum: integer('stock_minimum').notNull().default(0),
+    // Fecha de vencimiento del stock actual (una por producto, no por lote).
+    expiryDate: integer('expiry_date', { mode: 'timestamp_ms' }),
     active: integer('active', { mode: 'boolean' }).notNull().default(true),
     quickAccess: integer('quick_access', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
@@ -120,6 +129,7 @@ export const tickets = sqliteTable(
     chargedAt: integer('charged_at', { mode: 'timestamp_ms' }),
     voidedAt: integer('voided_at', { mode: 'timestamp_ms' }),
     voidedBy: text('voided_by'),
+    voidReason: text('void_reason'),
   },
   (table) => [
     index('tickets_status_idx').on(table.status),

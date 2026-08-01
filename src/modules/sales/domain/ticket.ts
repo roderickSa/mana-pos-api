@@ -22,6 +22,7 @@ export class Ticket {
     readonly chargedAt: Nullable<Date>,
     readonly voidedAt: Nullable<Date>,
     readonly voidedBy: Nullable<string>,
+    readonly voidReason: Nullable<string>,
   ) {}
 
   static open(
@@ -41,6 +42,7 @@ export class Ticket {
       userId,
       cashSessionId,
       at,
+      null,
       null,
       null,
       null,
@@ -66,10 +68,11 @@ export class Ticket {
       at,
       null,
       null,
+      null,
     );
   }
 
-  void(at: Date, voidedBy: string): Ticket {
+  void(at: Date, voidedBy: string, reason: Nullable<string>): Ticket {
     const next = new VoidedTicketStatus();
     this.assertTransition(next);
     return new Ticket(
@@ -84,6 +87,7 @@ export class Ticket {
       this.chargedAt,
       at,
       voidedBy,
+      reason,
     );
   }
 

@@ -4,6 +4,7 @@ import {
   StockMovementWithProduct,
 } from '#modules/inventory/domain/stock-movement-page.js';
 import type { MovementSearchParams } from '#modules/inventory/ports/movement-search-params.js';
+import { ExpiringProduct } from '#modules/inventory/domain/expiring-product.js';
 import { ProductStock } from '#modules/inventory/domain/product-stock.js';
 import type { StockMovement } from '#modules/inventory/domain/stock-movement.js';
 import type { InventoryRepository } from '#modules/inventory/ports/inventory-repository.js';
@@ -12,6 +13,8 @@ interface SeededStock {
   quantity: number;
   saleType: 'unit' | 'weight';
   costCents: number;
+  expiryDate?: Date | null;
+  name?: string;
 }
 
 export class InventoryRepositoryForTesting implements InventoryRepository {
@@ -47,6 +50,36 @@ export class InventoryRepositoryForTesting implements InventoryRepository {
       });
       this.movements.push(movement);
     }
+  }
+
+  async setProductCost(productId: string, costCents: number): Promise<void> {
+    const current = this.stockByProductId.get(productId);
+    if (current !== undefined) {
+      this.stockByProductId.set(productId, { ...current, costCents });
+    }
+  }
+
+  async setProductExpiry(productId: string, expiryDate: Nullable<Date>): Promise<void> {
+    const current = this.stockByProductId.get(productId);
+    if (current !== undefined) {
+      this.stockByProductId.set(productId, { ...current, expiryDate });
+    }
+  }
+
+  expiryOf(productId: string): Nullable<Date> {
+    return this.stockByProductId.get(productId)?.expiryDate ?? null;
+  }
+
+  async listExpiring(before: Date): Promise<ExpiringProduct[]> {
+    const items: ExpiringProduct[] = [];
+    for (const [productId, stock] of this.stockByProductId) {
+      const expiry = stock.expiryDate;
+      if (expiry == null || expiry > before) continue;
+      items.push(
+        new ExpiringProduct(productId, stock.name ?? productId, stock.saleType, stock.quantity, expiry),
+      );
+    }
+    return items;
   }
 
   async findMovementsByTicketId(ticketId: string): Promise<StockMovement[]> {

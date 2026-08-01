@@ -20,6 +20,7 @@ export class SearchProducts {
       this.normalizeQuery(input.query),
       input.category,
       input.onlyQuickAccess,
+      input.onlyLowStock,
       input.includeInactive,
       input.orderBySales,
       input.limit,

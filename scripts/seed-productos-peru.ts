@@ -8,7 +8,7 @@ interface Seed {
   category: 'bebidas' | 'abarrotes' | 'frutas-verduras' | 'limpieza' | 'pan';
   saleType: 'unit' | 'weight';
   price: number; // soles (por unidad o por kg)
-  supplier?: string;
+  supplier?: string | undefined;
   quickAccess?: boolean;
   shortCode?: string;
   stock?: number; // unidades o gramos
@@ -306,7 +306,7 @@ async function main(): Promise<void> {
     const response = await post('/catalog/products', body);
     if (response.status === 201) {
       created += 1;
-      const product = await response.json();
+      const product = (await response.json()) as { id: string };
       // Stock inicial pseudoaleatorio pero estable por índice.
       const stock = isWeight ? 2000 + (index % 7) * 1500 : 12 + (index % 9) * 6;
       await post('/inventory/entries', { productId: product.id, quantity: stock, userId: 'seed-demo' });

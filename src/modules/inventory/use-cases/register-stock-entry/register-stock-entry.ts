@@ -22,18 +22,35 @@ export class RegisterStockEntry {
       return new ProductNotFoundInInventory(input.productId);
     }
 
+    // Con costo capturado, la entrada vale ese costo y el producto adopta el
+    // costo de última compra; sin costo, se valoriza al costo vigente (0 = sin dato).
+    const valueCents =
+      input.unitCostCents === null
+        ? stock.costOf(input.quantity)
+        : Math.round(
+            stock.saleType === 'unit'
+              ? input.unitCostCents * input.quantity
+              : (input.unitCostCents * input.quantity) / 1000,
+          );
+
     const movement = new StockMovement(
       this.idGenerator.generate(),
       input.productId,
       'purchase',
       input.quantity,
-      stock.costOf(input.quantity),
+      valueCents,
       null,
       null,
       input.userId,
       this.timeManager.now(),
     );
     await this.inventoryRepository.applyMovements([movement]);
+    if (input.unitCostCents !== null) {
+      await this.inventoryRepository.setProductCost(input.productId, input.unitCostCents);
+    }
+    if (input.expiryDate !== null) {
+      await this.inventoryRepository.setProductExpiry(input.productId, input.expiryDate);
+    }
     return new StockEntryRegistered(movement);
   }
 }

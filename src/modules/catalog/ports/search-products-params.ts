@@ -5,6 +5,7 @@ export class SearchProductsParams {
     readonly normalizedQuery: Nullable<string>,
     readonly category: Nullable<string>,
     readonly onlyQuickAccess: boolean,
+    readonly onlyLowStock: boolean,
     readonly includeInactive: boolean,
     readonly orderBySales: boolean,
     readonly limit: number,

@@ -21,12 +21,22 @@ export class PaymentMethodTotal {
   ) {}
 }
 
+// Quién anuló cuánto en el período: control antihurto para el encargado.
+export class VoidedByUser {
+  constructor(
+    readonly user: string,
+    readonly count: number,
+    readonly totalCents: number,
+  ) {}
+}
+
 // Resumen del período filtrado: solo ventas cobradas (las anuladas no suman).
 export class SalesSummary {
   constructor(
     readonly chargedCount: number,
     readonly chargedTotalCents: number,
     readonly byMethod: PaymentMethodTotal[],
+    readonly voidedByUser: VoidedByUser[],
   ) {}
 }
 

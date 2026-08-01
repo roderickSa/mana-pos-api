@@ -8,11 +8,26 @@ import {
   type PrintReceiptResult,
   type ReceiptPrinter,
 } from '#modules/sales/ports/receipt-printer.js';
+import type { CloseSummary, CloseSummaryPrinter } from '#modules/cash/ports/close-summary-printer.js';
 
 // Adapters simulados para desarrollar sin hardware. Los reales (ESC/POS y
 // pulso al cajón) llegan con la tarea 5 y solo reemplazan estas clases.
-export class SimulatedReceiptPrinter implements ReceiptPrinter {
+export class SimulatedReceiptPrinter implements ReceiptPrinter, CloseSummaryPrinter {
   constructor(private readonly logger: FastifyBaseLogger) {}
+
+  async printCloseSummary(summary: CloseSummary): Promise<Nullable<string>> {
+    this.logger.info({
+      event: 'simulated_close_summary_printed',
+      msg: `Cierre de caja simulado (turno ${summary.session.shift})`,
+      data: {
+        sessionId: summary.session.id,
+        expectedCents: summary.session.expectedCashCents,
+        countedCents: summary.session.countedCashCents,
+        differenceCents: summary.differenceCents,
+      },
+    });
+    return null;
+  }
 
   async printSaleReceipt(ticket: Ticket, changeCents: Nullable<number>): Promise<PrintReceiptResult> {
     this.logger.info({

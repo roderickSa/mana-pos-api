@@ -13,4 +13,6 @@ export function registerInventoryRoutes(
     controller.kardex(request, reply),
   );
   server.get('/inventory/movements', (request, reply) => controller.movements(request, reply));
+  server.get('/inventory/expiring', (request, reply) => controller.expiring(request, reply));
+  server.post('/inventory/expiry', (request, reply) => controller.expiry(request, reply));
 }

@@ -21,10 +21,46 @@ describe('RegisterStockEntry', () => {
       new TimeManagerForTesting(),
     );
 
-    const result = await useCase.execute(new RegisterStockEntryInput('arroz', 24, 'encargado'));
+    const result = await useCase.execute(
+      new RegisterStockEntryInput('arroz', 24, 'encargado', null, null),
+    );
 
     expect(result).toBeInstanceOf(StockEntryRegistered);
     expect((await repository.getStock('arroz'))?.quantity).toBe(28);
+  });
+
+  it('captures the real purchase cost and updates the product cost', async () => {
+    const repository = new InventoryRepositoryForTesting();
+    repository.seedStock('arroz', 4, 'unit', 100);
+    const useCase = new RegisterStockEntry(
+      repository,
+      new IdGeneratorForTesting(),
+      new TimeManagerForTesting(),
+    );
+
+    const result = await useCase.execute(
+      new RegisterStockEntryInput('arroz', 10, 'encargado', 250, null),
+    );
+
+    expect(result).toBeInstanceOf(StockEntryRegistered);
+    if (!(result instanceof StockEntryRegistered)) return;
+    expect(result.movement.valueCents).toBe(2500);
+    expect((await repository.getStock('arroz'))?.costCents).toBe(250);
+  });
+
+  it('captures the batch expiry date on the product', async () => {
+    const repository = new InventoryRepositoryForTesting();
+    repository.seedStock('leche', 4);
+    const useCase = new RegisterStockEntry(
+      repository,
+      new IdGeneratorForTesting(),
+      new TimeManagerForTesting(),
+    );
+    const expiry = new Date('2026-08-15T12:00:00');
+
+    await useCase.execute(new RegisterStockEntryInput('leche', 6, 'encargado', null, expiry));
+
+    expect(repository.expiryOf('leche')).toEqual(expiry);
   });
 
   it('returns ProductNotFoundInInventory for unknown products', async () => {
@@ -34,7 +70,9 @@ describe('RegisterStockEntry', () => {
       new TimeManagerForTesting(),
     );
 
-    const result = await useCase.execute(new RegisterStockEntryInput('fantasma', 1, 'encargado'));
+    const result = await useCase.execute(
+      new RegisterStockEntryInput('fantasma', 1, 'encargado', null, null),
+    );
 
     expect(result).toBeInstanceOf(ProductNotFoundInInventory);
   });

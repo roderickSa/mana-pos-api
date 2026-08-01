@@ -5,6 +5,7 @@ export class SearchProductsInput {
     readonly query: Nullable<string>,
     readonly category: Nullable<string>,
     readonly onlyQuickAccess: boolean,
+    readonly onlyLowStock: boolean,
     readonly includeInactive: boolean,
     readonly orderBySales: boolean,
     readonly limit: number,

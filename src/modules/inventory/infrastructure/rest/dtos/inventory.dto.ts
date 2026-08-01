@@ -6,7 +6,17 @@ import type { StockMovement } from '#modules/inventory/domain/stock-movement.js'
 export const registerEntryDto = z.object({
   productId: z.string().min(1),
   quantity: z.number().int().positive(),
+  // Costo real de la compra (por unidad o por kg): opcional pero recomendado.
+  unitCostCents: z.number().int().positive().nullish(),
+  // Vencimiento del lote (YYYY-MM-DD), opcional.
+  expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
   userId: z.string().min(1).default('encargado'),
+});
+
+export const setExpiryDto = z.object({
+  productId: z.string().min(1),
+  // null limpia la fecha de vencimiento.
+  expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
 });
 
 export const registerAdjustmentDto = z.object({

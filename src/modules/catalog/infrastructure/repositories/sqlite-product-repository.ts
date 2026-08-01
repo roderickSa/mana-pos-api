@@ -3,11 +3,13 @@ import { and, eq, or, sql, type SQL } from 'drizzle-orm';
 import type { Nullable } from '#shared/domain/nullable.js';
 import type { DatabaseClient } from '#shared/infrastructure/database/client.js';
 import { products } from '#shared/infrastructure/database/schema.js';
+import { fuzzyMatchesName } from '#modules/catalog/domain/fuzzy-match.js';
 import { UnitProduct, WeightProduct, type Product } from '#modules/catalog/domain/product.js';
 import type { ProductRepository } from '#modules/catalog/ports/product-repository.js';
 import type { SearchProductsParams } from '#modules/catalog/ports/search-products-params.js';
 
 type ProductRow = typeof products.$inferSelect;
+type ProductWriteRow = Omit<ProductRow, 'expiryDate'>;
 
 export class SqliteProductRepository implements ProductRepository {
   constructor(private readonly db: DatabaseClient) {}
@@ -55,6 +57,12 @@ export class SqliteProductRepository implements ProductRepository {
     if (params.onlyQuickAccess) {
       conditions.push(eq(products.quickAccess, true));
     }
+    if (params.onlyLowStock) {
+      // Bajo = en o debajo del mínimo configurado (mínimo 0 = sin alerta).
+      conditions.push(
+        sql`${products.stockQuantity} <= ${products.stockMinimum} AND ${products.stockMinimum} > 0`,
+      );
+    }
     if (params.normalizedQuery !== null) {
       const byName = params.normalizedQuery.split(' ').map((token) => {
         const pattern = `%${escapeLikePattern(token)}%`;
@@ -100,7 +108,34 @@ export class SqliteProductRepository implements ProductRepository {
       .limit(params.limit)
       .offset(params.offset);
 
-    return rows.map((row) => this.toEntity(row));
+    if (rows.length > 0 || params.normalizedQuery === null || params.offset > 0) {
+      return rows.map((row) => this.toEntity(row));
+    }
+    return this.searchFuzzy(params);
+  }
+
+  // Segundo intento tolerante a typos: si el LIKE no encontró nada, se
+  // comparan los nombres con distancia de Levenshtein ("azucr" → "azucar").
+  private async searchFuzzy(params: SearchProductsParams): Promise<Product[]> {
+    const query = params.normalizedQuery;
+    if (query === null || /^\d+$/.test(query)) return [];
+
+    const filters: SQL[] = [];
+    if (!params.includeInactive) filters.push(eq(products.active, true));
+    if (params.category !== null) filters.push(eq(products.category, params.category));
+    if (params.onlyQuickAccess) filters.push(eq(products.quickAccess, true));
+
+    const candidates = await this.db
+      .select()
+      .from(products)
+      .where(filters.length > 0 ? and(...filters) : undefined)
+      .orderBy(products.name)
+      .limit(1000);
+
+    return candidates
+      .filter((row) => fuzzyMatchesName(row.normalizedName, query))
+      .slice(0, params.limit)
+      .map((row) => this.toEntity(row));
   }
 
   private toEntity(row: ProductRow): Product {
@@ -145,7 +180,8 @@ export class SqliteProductRepository implements ProductRepository {
     );
   }
 
-  private toRow(product: Product): ProductRow {
+  // La caducidad la administra el módulo inventory: catálogo nunca la pisa.
+  private toRow(product: Product): ProductWriteRow {
     const isUnit = product instanceof UnitProduct;
     return {
       id: product.id,

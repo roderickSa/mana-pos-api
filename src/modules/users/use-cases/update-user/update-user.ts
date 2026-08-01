@@ -1,8 +1,9 @@
 import type { Nullable } from '#shared/domain/nullable.js';
+import { isWeakPin } from '#modules/users/domain/pin-policy.js';
 import { User, type UserRole } from '#modules/users/domain/user.js';
 import type { PinHasher } from '#modules/users/ports/pin-hasher.js';
 import type { UserRepository } from '#modules/users/ports/user-repository.js';
-import { PinAlreadyInUse } from '#modules/users/use-cases/create-user/create-user.js';
+import { PinAlreadyInUse, WeakPin } from '#modules/users/use-cases/create-user/create-user.js';
 
 export class UpdateUserInput {
   constructor(
@@ -23,7 +24,7 @@ export class UserNotFoundById {
   constructor(readonly userId: string) {}
 }
 
-export type UpdateUserResult = UserUpdated | UserNotFoundById | PinAlreadyInUse;
+export type UpdateUserResult = UserUpdated | UserNotFoundById | PinAlreadyInUse | WeakPin;
 
 export class UpdateUser {
   constructor(
@@ -39,6 +40,9 @@ export class UpdateUser {
 
     let pinHash = existing.pinHash;
     if (input.newPin !== null) {
+      if (isWeakPin(input.newPin)) {
+        return new WeakPin();
+      }
       const others = (await this.userRepository.findAll()).filter((user) => user.id !== input.id);
       const pinTaken = others.some(
         (user) => user.active && this.pinHasher.verify(input.newPin ?? '', user.pinHash),

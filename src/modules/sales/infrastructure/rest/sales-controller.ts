@@ -46,6 +46,12 @@ import {
   TicketNotFoundForReprint,
 } from '#modules/sales/use-cases/reprint-receipt/reprint-receipt.js';
 import { SearchTicketsInput } from '#modules/sales/use-cases/search-tickets/search-tickets.input.js';
+import {
+  GetTicketDetail,
+  GetTicketDetailInput,
+  TicketDetailFound,
+  TicketDetailNotFound,
+} from '#modules/sales/use-cases/get-ticket-detail/get-ticket-detail.js';
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'Efectivo',
@@ -60,7 +66,21 @@ export class SalesController {
     private readonly voidTicket: VoidTicket,
     private readonly searchTickets: SearchTickets,
     private readonly reprintReceipt: ReprintReceipt,
+    private readonly getTicketDetail: GetTicketDetail,
   ) {}
+
+  async detail(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const result = await this.getTicketDetail.execute(new GetTicketDetailInput(ticketIdParam(request)));
+    if (result instanceof TicketDetailFound) {
+      await reply.status(200).send(toTicketResponse(result.ticket, null));
+      return;
+    }
+    if (result instanceof TicketDetailNotFound) {
+      await reply.status(404).send({ code: 'TICKET_NOT_FOUND', ticketId: result.ticketId });
+      return;
+    }
+    exhaustive(result);
+  }
 
   async doReprint(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const result = await this.reprintReceipt.execute(new ReprintReceiptInput(ticketIdParam(request)));
@@ -118,6 +138,7 @@ export class SalesController {
         chargedCount: result.summary.chargedCount,
         chargedTotalCents: result.summary.chargedTotalCents,
         byMethod: result.summary.byMethod,
+        voidedByUser: result.summary.voidedByUser,
       },
     });
   }
@@ -239,7 +260,9 @@ export class SalesController {
   async doVoid(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const ticketId = ticketIdParam(request);
     const body = voidTicketDto.parse(request.body ?? {});
-    const result = await this.voidTicket.execute(new VoidTicketInput(ticketId, body.voidedBy));
+    const result = await this.voidTicket.execute(
+      new VoidTicketInput(ticketId, body.voidedBy, body.reason),
+    );
 
     if (result instanceof TicketVoided || result instanceof TicketAlreadyVoided) {
       await reply.status(200).send(toTicketResponse(result.ticket, null));

@@ -7,6 +7,7 @@ import {
   CreateUserInput,
   PinAlreadyInUse,
   UserCreated,
+  WeakPin,
 } from '#modules/users/use-cases/create-user/create-user.js';
 import {
   InvalidPin,
@@ -78,13 +79,24 @@ describe('Users & PIN', () => {
   it('verifies manager PINs only', async () => {
     const { createUser, verifyManager } = build();
     await createUser.execute(new CreateUserInput('Rosa', '2468', 'cashier'));
-    await createUser.execute(new CreateUserInput('Jefe', '9999', 'manager'));
+    await createUser.execute(new CreateUserInput('Jefe', '9273', 'manager'));
 
     const cashierPin = await verifyManager.execute(new VerifyManagerPinInput('2468'));
-    const managerPin = await verifyManager.execute(new VerifyManagerPinInput('9999'));
+    const managerPin = await verifyManager.execute(new VerifyManagerPinInput('9273'));
 
     expect(cashierPin).toBeInstanceOf(NotAManagerPin);
     expect(managerPin).toBeInstanceOf(ManagerPinVerified);
+  });
+
+  it('rejects weak PINs (repeated or sequential digits)', async () => {
+    const { createUser } = build();
+
+    expect(await createUser.execute(new CreateUserInput('Rosa', '9999', 'cashier'))).toBeInstanceOf(
+      WeakPin,
+    );
+    expect(await createUser.execute(new CreateUserInput('Rosa', '1234', 'cashier'))).toBeInstanceOf(
+      WeakPin,
+    );
   });
 
   it('creates users with a hashed PIN (never plain text)', async () => {

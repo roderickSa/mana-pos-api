@@ -31,7 +31,7 @@ export class VoidTicket {
       return new VoidNotAllowed(ticket.status.name);
     }
 
-    const voided = ticket.void(this.timeManager.now(), input.voidedBy);
+    const voided = ticket.void(this.timeManager.now(), input.voidedBy, input.reason);
     await this.ticketRepository.save(voided);
     await this.stockDiscounter.reverseSale(voided.id, input.voidedBy);
     await this.creditGateway.reverseCreditForTicket(voided.id, input.voidedBy);

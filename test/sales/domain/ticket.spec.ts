@@ -10,9 +10,9 @@ describe('Ticket state machine', () => {
   });
 
   it('a voided ticket cannot be voided again', () => {
-    const voided = chargedTicketMother().void(new Date(), 'encargado');
+    const voided = chargedTicketMother().void(new Date(), 'encargado', 'cliente se arrepintió');
 
-    expect(() => voided.void(new Date(), 'encargado')).toThrow(InvalidTicketTransition);
+    expect(() => voided.void(new Date(), 'encargado', null)).toThrow(InvalidTicketTransition);
   });
 
   it('computes the total from its lines', () => {

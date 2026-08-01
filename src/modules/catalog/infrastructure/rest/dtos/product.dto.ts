@@ -66,6 +66,10 @@ export const searchProductsDto = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
+  lowStock: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
   includeInactive: z
     .enum(['true', 'false'])
     .optional()

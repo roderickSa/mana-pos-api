@@ -56,16 +56,16 @@ describe('SqliteProductRepository', () => {
     await repository.save(weightProductMother({ id: 'p3', name: 'Plátano de seda' }));
     await repository.save(unitProductMother({ id: 'p4', name: 'Trapo industrial', barcode: '4', active: false }));
 
-    const byQuery = await repository.search(new SearchProductsParams('inca 600', null, false, false, false, 50, 0));
+    const byQuery = await repository.search(new SearchProductsParams('inca 600', null, false, false, false, false, 50, 0));
     expect(byQuery.map((product) => product.id)).toEqual(['p1']);
 
-    const byAccent = await repository.search(new SearchProductsParams('platano', null, false, false, false, 50, 0));
+    const byAccent = await repository.search(new SearchProductsParams('platano', null, false, false, false, false, 50, 0));
     expect(byAccent.map((product) => product.id)).toEqual(['p3']);
 
-    const activeOnly = await repository.search(new SearchProductsParams('trapo', null, false, false, false, 50, 0));
+    const activeOnly = await repository.search(new SearchProductsParams('trapo', null, false, false, false, false, 50, 0));
     expect(activeOnly).toHaveLength(0);
 
-    const quickAccessOnly = await repository.search(new SearchProductsParams(null, null, true, false, false, 50, 0));
+    const quickAccessOnly = await repository.search(new SearchProductsParams(null, null, true, false, false, false, 50, 0));
     expect(quickAccessOnly.map((product) => product.id)).toEqual(['p3']);
   });
 });

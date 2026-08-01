@@ -1,5 +1,6 @@
 import type { IdGenerator } from '#shared/ports/id-generator.js';
 import type { TimeManager } from '#shared/ports/time-manager.js';
+import { isWeakPin } from '#modules/users/domain/pin-policy.js';
 import { User, type UserRole } from '#modules/users/domain/user.js';
 import type { PinHasher } from '#modules/users/ports/pin-hasher.js';
 import type { UserRepository } from '#modules/users/ports/user-repository.js';
@@ -19,7 +20,9 @@ export class UserCreated {
 // El PIN identifica a la persona, así que debe ser único entre usuarios activos.
 export class PinAlreadyInUse {}
 
-export type CreateUserResult = UserCreated | PinAlreadyInUse;
+export class WeakPin {}
+
+export type CreateUserResult = UserCreated | PinAlreadyInUse | WeakPin;
 
 export class CreateUser {
   constructor(
@@ -30,6 +33,9 @@ export class CreateUser {
   ) {}
 
   async execute(input: CreateUserInput): Promise<CreateUserResult> {
+    if (isWeakPin(input.pin)) {
+      return new WeakPin();
+    }
     const existing = await this.userRepository.findAll();
     const pinTaken = existing.some(
       (user) => user.active && this.pinHasher.verify(input.pin, user.pinHash),

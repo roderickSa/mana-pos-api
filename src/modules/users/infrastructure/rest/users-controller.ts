@@ -7,6 +7,7 @@ import {
   CreateUser,
   CreateUserInput,
   PinAlreadyInUse,
+  WeakPin,
   UserCreated,
 } from '#modules/users/use-cases/create-user/create-user.js';
 import { ListUsers } from '#modules/users/use-cases/list-users/list-users.js';
@@ -118,6 +119,14 @@ export class UsersController {
       });
       return;
     }
+    if (result instanceof WeakPin) {
+      await reply.status(400).send({
+        code: 'WEAK_PIN',
+        message:
+          'Ese PIN es muy fácil de adivinar (dígitos repetidos o en secuencia). Elige otro.',
+      });
+      return;
+    }
     exhaustive(result);
   }
 
@@ -138,6 +147,14 @@ export class UsersController {
       await reply.status(409).send({
         code: 'PIN_ALREADY_IN_USE',
         message: 'Ese PIN ya lo usa otra persona. Elige uno distinto.',
+      });
+      return;
+    }
+    if (result instanceof WeakPin) {
+      await reply.status(400).send({
+        code: 'WEAK_PIN',
+        message:
+          'Ese PIN es muy fácil de adivinar (dígitos repetidos o en secuencia). Elige otro.',
       });
       return;
     }

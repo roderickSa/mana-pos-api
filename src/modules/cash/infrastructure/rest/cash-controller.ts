@@ -31,6 +31,12 @@ import {
   NoSessionToClose,
   SessionClosed,
 } from '#modules/cash/use-cases/close-cash-session/close-cash-session.js';
+import {
+  CloseSummaryPrinted,
+  NoClosedSessionToPrint,
+  PrintCloseSummary,
+  SessionAlreadyReopened,
+} from '#modules/cash/use-cases/print-close-summary/print-close-summary.js';
 
 const openDto = z.object({
   shift: z.enum(['morning', 'afternoon']),
@@ -92,7 +98,34 @@ export class CashController {
     private readonly getCashStatus: GetCashStatus,
     private readonly registerCashMovement: RegisterCashMovement,
     private readonly closeCashSession: CloseCashSession,
+    private readonly printCloseSummary: PrintCloseSummary,
   ) {}
+
+  async printLastClose(_request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const result = await this.printCloseSummary.execute();
+    if (result instanceof CloseSummaryPrinted) {
+      await reply.status(200).send({
+        printerWarning: result.printerWarning,
+        message: result.printerWarning ?? 'Resumen de cierre enviado a la impresora.',
+      });
+      return;
+    }
+    if (result instanceof NoClosedSessionToPrint) {
+      await reply.status(409).send({
+        code: 'NO_CLOSED_SESSION',
+        message: 'Todavía no hay ningún cierre de caja para imprimir.',
+      });
+      return;
+    }
+    if (result instanceof SessionAlreadyReopened) {
+      await reply.status(409).send({
+        code: 'SESSION_REOPENED',
+        message: 'Ya hay una caja nueva abierta: el resumen se imprime justo al cerrar.',
+      });
+      return;
+    }
+    exhaustive(result);
+  }
 
   async status(_request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const result = await this.getCashStatus.execute();

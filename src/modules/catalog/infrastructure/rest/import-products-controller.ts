@@ -162,7 +162,7 @@ export class ImportProductsController {
         const initialStock = row.stock_inicial ?? 0;
         if (initialStock > 0) {
           await this.registerStockEntry.execute(
-            new RegisterStockEntryInput(result.product.id, initialStock, IMPORT_USER),
+            new RegisterStockEntryInput(result.product.id, initialStock, IMPORT_USER, null, null),
           );
         }
         continue;
