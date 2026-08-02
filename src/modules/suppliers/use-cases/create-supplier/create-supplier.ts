@@ -17,6 +17,9 @@ export class CreateSupplier {
       input.name,
       input.phone,
       input.notes,
+      input.visitDays,
+      input.contactName,
+      input.paymentTerms,
       true,
       this.timeManager.now(),
     );

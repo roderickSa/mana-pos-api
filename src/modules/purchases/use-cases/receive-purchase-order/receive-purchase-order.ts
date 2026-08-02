@@ -1,6 +1,12 @@
+import type { IdGenerator } from '#shared/ports/id-generator.js';
 import type { TimeManager } from '#shared/ports/time-manager.js';
 import type { PurchaseOrderLine } from '#modules/purchases/domain/purchase-order.js';
+import {
+  PurchaseReception,
+  PurchaseReceptionLine,
+} from '#modules/purchases/domain/purchase-reception.js';
 import type { PurchaseOrderRepository } from '#modules/purchases/ports/purchase-order-repository.js';
+import type { PurchaseReceptionRepository } from '#modules/purchases/ports/purchase-reception-repository.js';
 import type { StockReceiver } from '#modules/purchases/ports/stock-receiver.js';
 import { PurchaseOrderNotFoundById } from '#modules/purchases/use-cases/get-purchase-order/get-purchase-order.js';
 import type {
@@ -20,6 +26,8 @@ export class ReceivePurchaseOrder {
   constructor(
     private readonly orderRepository: PurchaseOrderRepository,
     private readonly stockReceiver: StockReceiver,
+    private readonly receptionRepository: PurchaseReceptionRepository,
+    private readonly idGenerator: IdGenerator,
     private readonly timeManager: TimeManager,
   ) {}
 
@@ -62,8 +70,28 @@ export class ReceivePurchaseOrder {
       quantities.set(line.id, lineInput.quantity);
     }
 
-    const received = order.receive(quantities, this.timeManager.now());
+    const now = this.timeManager.now();
+    const received = order.receive(quantities, now);
     await this.orderRepository.save(received);
+    // La tanda queda registrada tal cual llegó (cantidad, costo real,
+    // vencimiento): el detalle de la orden muestra la historia completa.
+    await this.receptionRepository.save(
+      new PurchaseReception(
+        this.idGenerator.generate(),
+        order.id,
+        now,
+        input.receivedBy,
+        deliveries.map(
+          ({ line, lineInput }) =>
+            new PurchaseReceptionLine(
+              line.productId,
+              lineInput.quantity,
+              lineInput.unitCostCents ?? line.unitCostCents,
+              lineInput.expiryDate,
+            ),
+        ),
+      ),
+    );
     return new PurchaseOrderReceived(received);
   }
 }

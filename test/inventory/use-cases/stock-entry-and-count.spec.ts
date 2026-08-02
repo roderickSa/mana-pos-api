@@ -8,6 +8,7 @@ import { SetStockCount } from '#modules/inventory/use-cases/set-stock-count/set-
 import { SetStockCountInput } from '#modules/inventory/use-cases/set-stock-count/set-stock-count.input.js';
 import { StockCountRegistered } from '#modules/inventory/use-cases/set-stock-count/set-stock-count.output.js';
 import { InventoryRepositoryForTesting } from '../test-doubles/inventory-repository-for-testing.js';
+import { LotRepositoryForTesting } from '../test-doubles/lot-repository-for-testing.js';
 import { IdGeneratorForTesting } from '../../shared/test-doubles/id-generator-for-testing.js';
 import { TimeManagerForTesting } from '../../shared/test-doubles/time-manager-for-testing.js';
 
@@ -17,6 +18,7 @@ describe('RegisterStockEntry', () => {
     repository.seedStock('arroz', 4);
     const useCase = new RegisterStockEntry(
       repository,
+      new LotRepositoryForTesting(),
       new IdGeneratorForTesting(),
       new TimeManagerForTesting(),
     );
@@ -34,6 +36,7 @@ describe('RegisterStockEntry', () => {
     repository.seedStock('arroz', 4, 'unit', 100);
     const useCase = new RegisterStockEntry(
       repository,
+      new LotRepositoryForTesting(),
       new IdGeneratorForTesting(),
       new TimeManagerForTesting(),
     );
@@ -50,9 +53,11 @@ describe('RegisterStockEntry', () => {
 
   it('captures the batch expiry date on the product', async () => {
     const repository = new InventoryRepositoryForTesting();
+    const lots = new LotRepositoryForTesting();
     repository.seedStock('leche', 4);
     const useCase = new RegisterStockEntry(
       repository,
+      lots,
       new IdGeneratorForTesting(),
       new TimeManagerForTesting(),
     );
@@ -60,12 +65,18 @@ describe('RegisterStockEntry', () => {
 
     await useCase.execute(new RegisterStockEntryInput('leche', 6, 'encargado', null, expiry));
 
-    expect(repository.expiryOf('leche')).toEqual(expiry);
+    // La entrada con fecha crea su LOTE (no pisa fechas de entradas previas).
+    const created = lots.all();
+    expect(created).toHaveLength(1);
+    expect(created[0]?.productId).toBe('leche');
+    expect(created[0]?.quantity).toBe(6);
+    expect(created[0]?.expiryDate).toEqual(expiry);
   });
 
   it('returns ProductNotFoundInInventory for unknown products', async () => {
     const useCase = new RegisterStockEntry(
       new InventoryRepositoryForTesting(),
+      new LotRepositoryForTesting(),
       new IdGeneratorForTesting(),
       new TimeManagerForTesting(),
     );

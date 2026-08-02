@@ -6,11 +6,13 @@ import type { User } from '#modules/users/domain/user.js';
 import {
   CreateUser,
   CreateUserInput,
+  OnlyOwnersManageOwners,
   PinAlreadyInUse,
   WeakPin,
   UserCreated,
 } from '#modules/users/use-cases/create-user/create-user.js';
 import { ListUsers } from '#modules/users/use-cases/list-users/list-users.js';
+import { Logout, LogoutInput } from '#modules/users/use-cases/logout/logout.js';
 import {
   InvalidPin,
   LoginSucceeded,
@@ -35,12 +37,12 @@ const pinDto = z.object({ pin: z.string().regex(/^\d{4,6}$/) });
 const createUserDto = z.object({
   name: z.string().min(1),
   pin: z.string().regex(/^\d{4,6}$/),
-  role: z.enum(['manager', 'cashier']),
+  role: z.enum(['owner', 'manager', 'cashier']),
 });
 
 const updateUserDto = z.object({
   name: z.string().min(1),
-  role: z.enum(['manager', 'cashier']),
+  role: z.enum(['owner', 'manager', 'cashier']),
   active: z.boolean(),
   newPin: z.string().regex(/^\d{4,6}$/).nullish(),
 });
@@ -70,13 +72,14 @@ export class UsersController {
     private readonly createUser: CreateUser,
     private readonly updateUser: UpdateUser,
     private readonly listUsers: ListUsers,
+    private readonly logoutUseCase: Logout,
   ) {}
 
   async login(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const body = pinDto.parse(request.body);
     const result = await this.loginWithPin.execute(new LoginWithPinInput(body.pin));
     if (result instanceof LoginSucceeded) {
-      await reply.status(200).send(toUserResponse(result.user));
+      await reply.status(200).send({ ...toUserResponse(result.user), token: result.session.token });
       return;
     }
     if (result instanceof InvalidPin) {
@@ -87,6 +90,18 @@ export class UsersController {
       return;
     }
     exhaustive(result);
+  }
+
+  // Cierra la sesión del Bearer actual. Siempre 204: al front solo le
+  // importa que el token quede muerto, exista o no.
+  async logout(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const header = request.headers.authorization;
+    const token =
+      typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7) : '';
+    if (token !== '') {
+      await this.logoutUseCase.execute(new LogoutInput(token));
+    }
+    await reply.status(204).send();
   }
 
   async verifyManager(request: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -113,9 +128,19 @@ export class UsersController {
 
   async create(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const body = createUserDto.parse(request.body);
-    const result = await this.createUser.execute(new CreateUserInput(body.name, body.pin, body.role));
+    const actingRole = request.authUser === null ? 'cashier' : request.authUser.role;
+    const result = await this.createUser.execute(
+      new CreateUserInput(body.name, body.pin, body.role, actingRole),
+    );
     if (result instanceof UserCreated) {
       await reply.status(201).send(toUserResponse(result.user));
+      return;
+    }
+    if (result instanceof OnlyOwnersManageOwners) {
+      await reply.status(403).send({
+        code: 'ONLY_OWNERS_MANAGE_OWNERS',
+        message: 'Solo el dueño puede crear o editar cuentas de dueño.',
+      });
       return;
     }
     if (result instanceof PinAlreadyInUse) {
@@ -138,11 +163,26 @@ export class UsersController {
 
   async update(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const body = updateUserDto.parse(request.body);
+    const actingRole = request.authUser === null ? 'cashier' : request.authUser.role;
     const result = await this.updateUser.execute(
-      new UpdateUserInput(idParam(request), body.name, body.role, body.active, body.newPin ?? null),
+      new UpdateUserInput(
+        idParam(request),
+        body.name,
+        body.role,
+        body.active,
+        body.newPin ?? null,
+        actingRole,
+      ),
     );
     if (result instanceof UserUpdated) {
       await reply.status(200).send(toUserResponse(result.user));
+      return;
+    }
+    if (result instanceof OnlyOwnersManageOwners) {
+      await reply.status(403).send({
+        code: 'ONLY_OWNERS_MANAGE_OWNERS',
+        message: 'Solo el dueño puede crear o editar cuentas de dueño.',
+      });
       return;
     }
     if (result instanceof UserNotFoundById) {

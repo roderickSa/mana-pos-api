@@ -6,6 +6,9 @@ export class UpdateSupplierInput {
     readonly name: string,
     readonly phone: Nullable<string>,
     readonly notes: Nullable<string>,
+    readonly visitDays: string[],
+    readonly contactName: Nullable<string>,
+    readonly paymentTerms: Nullable<string>,
     readonly active: boolean,
   ) {}
 }

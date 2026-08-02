@@ -19,6 +19,7 @@ import {
 import { PurchaseOrderRepositoryForTesting } from '../test-doubles/purchase-order-repository-for-testing.js';
 import { PurchaseProductLookupForTesting } from '../test-doubles/purchase-product-lookup-for-testing.js';
 import { StockReceiverForTesting } from '../test-doubles/stock-receiver-for-testing.js';
+import { PurchaseReceptionRepositoryForTesting } from '../test-doubles/purchase-reception-repository-for-testing.js';
 import { SupplierLookupForTesting } from '../test-doubles/supplier-lookup-for-testing.js';
 import { IdGeneratorForTesting } from '../../shared/test-doubles/id-generator-for-testing.js';
 import { TimeManagerForTesting } from '../../shared/test-doubles/time-manager-for-testing.js';
@@ -26,9 +27,16 @@ import { TimeManagerForTesting } from '../../shared/test-doubles/time-manager-fo
 function build() {
   const repository = new PurchaseOrderRepositoryForTesting();
   const stockReceiver = new StockReceiverForTesting();
+  const receptions = new PurchaseReceptionRepositoryForTesting();
   const timeManager = new TimeManagerForTesting();
-  const receive = new ReceivePurchaseOrder(repository, stockReceiver, timeManager);
-  return { repository, stockReceiver, receive };
+  const receive = new ReceivePurchaseOrder(
+    repository,
+    stockReceiver,
+    receptions,
+    new IdGeneratorForTesting(),
+    timeManager,
+  );
+  return { repository, stockReceiver, receptions, receive };
 }
 
 // Orden de prueba: 12 arroces a S/ 22.00 y 3 kg de queso a S/ 28.00 el kg.
@@ -96,6 +104,33 @@ describe('ReceivePurchaseOrder', () => {
     expect(result.order.status).toBe('received');
     expect(stockReceiver.received[0]?.unitCostCents).toBe(2100);
     expect(stockReceiver.received[1]?.expiryDate).toEqual(expiry);
+  });
+
+  it('records one reception per delivery with the real cost of each batch', async () => {
+    const { repository, receptions, receive } = build();
+    const order = await seedOrder(repository);
+    const arroz = order.lines[0];
+    if (arroz === undefined) throw new Error('missing line');
+
+    await receive.execute(
+      new ReceivePurchaseOrderInput(order.id, 'encargado', [
+        new ReceivePurchaseOrderLineInput(arroz.id, 6, null, null),
+      ]),
+    );
+    await receive.execute(
+      new ReceivePurchaseOrderInput(order.id, 'Rosa', [
+        new ReceivePurchaseOrderLineInput(arroz.id, 6, 2100, null),
+      ]),
+    );
+
+    const history = await receptions.listByOrder(order.id);
+    expect(history).toHaveLength(2);
+    expect(history[0]?.receivedBy).toBe('encargado');
+    // Sin costo real → queda registrado el pactado de la línea.
+    expect(history[0]?.lines[0]?.unitCostCents).toBe(2200);
+    expect(history[1]?.receivedBy).toBe('Rosa');
+    expect(history[1]?.lines[0]?.unitCostCents).toBe(2100);
+    expect(history[1]?.lines[0]?.productId).toBe('arroz');
   });
 
   it('refuses to receive against a cancelled order', async () => {

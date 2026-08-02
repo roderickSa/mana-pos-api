@@ -1,3 +1,4 @@
+import type { Nullable } from '#shared/domain/nullable.js';
 import type { TimeManager } from '#shared/ports/time-manager.js';
 import type { CashBreakdown, CashSession } from '#modules/cash/domain/cash-session.js';
 import type { CashInflowSource, MethodTotal } from '#modules/cash/ports/cash-inflow-source.js';
@@ -8,6 +9,7 @@ export class CloseCashSessionInput {
   constructor(
     readonly countedCashCents: number,
     readonly userId: string,
+    readonly note: Nullable<string>,
   ) {}
 }
 
@@ -25,7 +27,13 @@ export class SessionClosed {
 
 export class NoSessionToClose {}
 
-export type CloseCashSessionResult = SessionClosed | NoSessionToClose;
+// El conteo no cuadró y no vino explicación: un descuadre sin nota es un
+// hueco en la auditoría de caja.
+export class ClosingNoteRequired {
+  constructor(readonly differenceCents: number) {}
+}
+
+export type CloseCashSessionResult = SessionClosed | NoSessionToClose | ClosingNoteRequired;
 
 export class CloseCashSession {
   constructor(
@@ -42,11 +50,17 @@ export class CloseCashSession {
     }
 
     const breakdown = await this.getCashStatus.buildBreakdown(session);
+    const difference = input.countedCashCents - breakdown.currentCashCents;
+    const note = input.note === null || input.note.trim() === '' ? null : input.note.trim();
+    if (difference !== 0 && note === null) {
+      return new ClosingNoteRequired(difference);
+    }
     const closed = session.close(
       breakdown.currentCashCents,
       input.countedCashCents,
       input.userId,
       this.timeManager.now(),
+      note,
     );
     await this.cashSessionRepository.save(closed);
     const salesByMethod = await this.cashInflowSource.salesByMethodSince(session.openedAt);

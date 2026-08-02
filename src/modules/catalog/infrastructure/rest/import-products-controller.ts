@@ -2,7 +2,10 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import * as XLSX from 'xlsx';
 
+import { UnitProduct } from '#modules/catalog/domain/product.js';
 import { CreateProduct } from '#modules/catalog/use-cases/create-product/create-product.js';
+import { SearchProducts } from '#modules/catalog/use-cases/search-products/search-products.js';
+import { SearchProductsInput } from '#modules/catalog/use-cases/search-products/search-products.input.js';
 import {
   CreateUnitProductInput,
   CreateWeightProductInput,
@@ -66,7 +69,60 @@ export class ImportProductsController {
     private readonly registerStockEntry: RegisterStockEntry,
     private readonly createSupplier: CreateSupplier,
     private readonly listSuppliers: ListSuppliers,
+    private readonly searchProducts: SearchProducts,
   ) {}
+
+  // Exportación completa del inventario: sirve como respaldo legible y como
+  // base para actualizar en Excel y re-importar.
+  async export(_request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const page = await this.searchProducts.execute(
+      new SearchProductsInput(null, null, null, false, false, false, true, false, 10000, 0),
+    );
+    const suppliers = await this.listSuppliers.execute();
+    const supplierNames = new Map(suppliers.map((supplier) => [supplier.id, supplier.name]));
+    const rows = page.items.map((product) => {
+      const isUnit = product instanceof UnitProduct;
+      return [
+        product.name,
+        isUnit ? 'unidad' : 'peso',
+        product.category,
+        (isUnit ? product.priceCents : product.pricePerKgCents) / 100,
+        (isUnit ? product.costCents : product.costPerKgCents) / 100,
+        product.barcode ?? '',
+        product.shortCode ?? '',
+        isUnit ? product.stockUnits : product.stockGrams,
+        isUnit ? product.stockMinimum : product.stockMinimumGrams,
+        product.supplierIds
+          .map((id) => supplierNames.get(id) ?? '')
+          .filter((name) => name !== '')
+          .join(', '),
+        product.active ? 'si' : 'no',
+      ];
+    });
+    const sheet = XLSX.utils.aoa_to_sheet([
+      [
+        'nombre',
+        'tipo',
+        'categoria',
+        'precio',
+        'costo',
+        'codigo_barras',
+        'codigo_corto',
+        'stock',
+        'stock_minimo',
+        'proveedores',
+        'activo',
+      ],
+      ...rows,
+    ]);
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, 'Inventario');
+    const buffer = XLSX.write(book, { type: 'buffer', bookType: 'xlsx' });
+    await reply
+      .header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('content-disposition', 'attachment; filename="inventario-mana.xlsx"')
+      .send(buffer);
+  }
 
   async template(_request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const sheet = XLSX.utils.aoa_to_sheet([
@@ -195,7 +251,7 @@ export class ImportProductsController {
     if (existing !== undefined) {
       return existing;
     }
-    const created = await this.createSupplier.execute(new CreateSupplierInput(name, null, null));
+    const created = await this.createSupplier.execute(new CreateSupplierInput(name, null, null, [], null, null));
     index.set(name.toLowerCase(), created.id);
     return created.id;
   }

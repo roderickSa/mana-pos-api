@@ -1,6 +1,11 @@
 import type { Nullable } from '#shared/domain/nullable.js';
 
-export type UserRole = 'manager' | 'cashier';
+export type UserRole = 'owner' | 'manager' | 'cashier';
+
+// Jerarquía: el dueño puede todo lo del encargado, el encargado todo lo de
+// la cajera. Los chequeos de permiso van SIEMPRE por hasAtLeast, nunca por
+// comparación de strings — así agregar un rol no rompe los gates existentes.
+const ROLE_RANK: Record<UserRole, number> = { owner: 3, manager: 2, cashier: 1 };
 
 export class User {
   constructor(
@@ -13,8 +18,16 @@ export class User {
     readonly lastLoginAt: Nullable<Date>,
   ) {}
 
+  hasAtLeast(role: UserRole): boolean {
+    return ROLE_RANK[this.role] >= ROLE_RANK[role];
+  }
+
+  isOwner(): boolean {
+    return this.role === 'owner';
+  }
+
   isManager(): boolean {
-    return this.role === 'manager';
+    return this.hasAtLeast('manager');
   }
 
   withLastLogin(at: Date): User {

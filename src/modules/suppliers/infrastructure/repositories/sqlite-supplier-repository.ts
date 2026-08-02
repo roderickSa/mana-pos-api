@@ -27,7 +27,17 @@ export class SqliteSupplierRepository implements SupplierRepository {
   }
 
   private toEntity(row: SupplierRow): Supplier {
-    return new Supplier(row.id, row.name, row.phone, row.notes, row.active, row.createdAt);
+    return new Supplier(
+      row.id,
+      row.name,
+      row.phone,
+      row.notes,
+      row.visitDays === null || row.visitDays === '' ? [] : row.visitDays.split(','),
+      row.contactName,
+      row.paymentTerms,
+      row.active,
+      row.createdAt,
+    );
   }
 
   private toRow(supplier: Supplier): SupplierRow {
@@ -36,6 +46,9 @@ export class SqliteSupplierRepository implements SupplierRepository {
       name: supplier.name,
       phone: supplier.phone,
       notes: supplier.notes,
+      visitDays: supplier.visitDays.length === 0 ? null : supplier.visitDays.join(','),
+      contactName: supplier.contactName,
+      paymentTerms: supplier.paymentTerms,
       active: supplier.active,
       createdAt: supplier.createdAt,
     };

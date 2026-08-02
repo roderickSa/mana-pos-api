@@ -3,7 +3,6 @@ import { and, desc, eq, gte, lte, sql, type SQL } from 'drizzle-orm';
 import type { Nullable } from '#shared/domain/nullable.js';
 import type { DatabaseClient } from '#shared/infrastructure/database/client.js';
 import { products, stockMovements } from '#shared/infrastructure/database/schema.js';
-import { ExpiringProduct } from '#modules/inventory/domain/expiring-product.js';
 import { ProductStock } from '#modules/inventory/domain/product-stock.js';
 import { StockMovement } from '#modules/inventory/domain/stock-movement.js';
 import {
@@ -51,33 +50,6 @@ export class SqliteInventoryRepository implements InventoryRepository {
       .update(products)
       .set({ costCents, updatedAt: new Date() })
       .where(eq(products.id, productId));
-  }
-
-  async setProductExpiry(productId: string, expiryDate: Nullable<Date>): Promise<void> {
-    await this.db
-      .update(products)
-      .set({ expiryDate, updatedAt: new Date() })
-      .where(eq(products.id, productId));
-  }
-
-  async listExpiring(before: Date): Promise<ExpiringProduct[]> {
-    const rows = await this.db
-      .select({
-        id: products.id,
-        name: products.name,
-        saleType: products.saleType,
-        stockQuantity: products.stockQuantity,
-        expiryDate: products.expiryDate,
-      })
-      .from(products)
-      .where(and(eq(products.active, true), lte(products.expiryDate, before)))
-      .orderBy(products.expiryDate);
-    return rows
-      .filter((row): row is typeof row & { expiryDate: Date } => row.expiryDate !== null)
-      .map(
-        (row) =>
-          new ExpiringProduct(row.id, row.name, row.saleType, row.stockQuantity, row.expiryDate),
-      );
   }
 
   async findMovementsByTicketId(ticketId: string): Promise<StockMovement[]> {

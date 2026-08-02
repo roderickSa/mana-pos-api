@@ -3,7 +3,11 @@ import { isWeakPin } from '#modules/users/domain/pin-policy.js';
 import { User, type UserRole } from '#modules/users/domain/user.js';
 import type { PinHasher } from '#modules/users/ports/pin-hasher.js';
 import type { UserRepository } from '#modules/users/ports/user-repository.js';
-import { PinAlreadyInUse, WeakPin } from '#modules/users/use-cases/create-user/create-user.js';
+import {
+  OnlyOwnersManageOwners,
+  PinAlreadyInUse,
+  WeakPin,
+} from '#modules/users/use-cases/create-user/create-user.js';
 
 export class UpdateUserInput {
   constructor(
@@ -13,6 +17,8 @@ export class UpdateUserInput {
     readonly active: boolean,
     // null = mantener el PIN actual.
     readonly newPin: Nullable<string>,
+    // Quién ejecuta: solo un dueño toca cuentas de dueño (o asigna ese rol).
+    readonly actingRole: UserRole,
   ) {}
 }
 
@@ -24,7 +30,12 @@ export class UserNotFoundById {
   constructor(readonly userId: string) {}
 }
 
-export type UpdateUserResult = UserUpdated | UserNotFoundById | PinAlreadyInUse | WeakPin;
+export type UpdateUserResult =
+  | UserUpdated
+  | UserNotFoundById
+  | PinAlreadyInUse
+  | WeakPin
+  | OnlyOwnersManageOwners;
 
 export class UpdateUser {
   constructor(
@@ -36,6 +47,9 @@ export class UpdateUser {
     const existing = await this.userRepository.findById(input.id);
     if (existing === null) {
       return new UserNotFoundById(input.id);
+    }
+    if ((existing.isOwner() || input.role === 'owner') && input.actingRole !== 'owner') {
+      return new OnlyOwnersManageOwners();
     }
 
     let pinHash = existing.pinHash;

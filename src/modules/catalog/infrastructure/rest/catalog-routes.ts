@@ -18,6 +18,9 @@ export function registerCatalogRoutes(
   server.get('/catalog/products/import/template', (request, reply) =>
     importController.template(request, reply),
   );
+  server.get('/catalog/products/export.xlsx', (request, reply) =>
+    importController.export(request, reply),
+  );
   server.post('/catalog/products/import', (request, reply) =>
     importController.import(request, reply),
   );

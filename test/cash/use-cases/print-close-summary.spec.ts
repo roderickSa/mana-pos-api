@@ -86,7 +86,7 @@ describe('PrintCloseSummary', () => {
     const { inflow, open, close, printer, print } = build();
     await open.execute(new OpenCashSessionInput('morning', 5000, 'encargado'));
     inflow.cashSales = 10000;
-    await close.execute(new CloseCashSessionInput(15000, 'encargado'));
+    await close.execute(new CloseCashSessionInput(15000, 'encargado', null));
 
     const result = await print.execute();
 
@@ -107,7 +107,7 @@ describe('PrintCloseSummary', () => {
     const { inflow, open, close, print, printer } = build();
     await open.execute(new OpenCashSessionInput('morning', 5000, 'encargado'));
     inflow.cashSales = 2000;
-    await close.execute(new CloseCashSessionInput(7000, 'encargado'));
+    await close.execute(new CloseCashSessionInput(7000, 'encargado', null));
     await open.execute(new OpenCashSessionInput('afternoon', 3000, 'encargado'));
 
     expect(await print.execute()).toBeInstanceOf(SessionAlreadyReopened);

@@ -24,6 +24,8 @@ export class CashSession {
     readonly closedAt: Nullable<Date>,
     readonly expectedCashCents: Nullable<number>,
     readonly countedCashCents: Nullable<number>,
+    // Obligatoria cuando el conteo no cuadra: el descuadre siempre se explica.
+    readonly closingNote: Nullable<string>,
   ) {}
 
   static open(
@@ -44,6 +46,7 @@ export class CashSession {
       null,
       null,
       null,
+      null,
     );
   }
 
@@ -51,7 +54,13 @@ export class CashSession {
     return this.status instanceof OpenCashSessionStatus;
   }
 
-  close(expectedCashCents: number, countedCashCents: number, closedBy: string, at: Date): CashSession {
+  close(
+    expectedCashCents: number,
+    countedCashCents: number,
+    closedBy: string,
+    at: Date,
+    closingNote: Nullable<string>,
+  ): CashSession {
     return new CashSession(
       this.id,
       this.shift,
@@ -63,6 +72,7 @@ export class CashSession {
       at,
       expectedCashCents,
       countedCashCents,
+      closingNote,
     );
   }
 }

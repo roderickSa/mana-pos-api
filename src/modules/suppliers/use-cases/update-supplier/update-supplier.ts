@@ -25,6 +25,9 @@ export class UpdateSupplier {
       input.name,
       input.phone,
       input.notes,
+      input.visitDays,
+      input.contactName,
+      input.paymentTerms,
       input.active,
       existing.createdAt,
     );

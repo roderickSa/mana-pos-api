@@ -10,6 +10,8 @@ export class CreateUserInput {
     readonly name: string,
     readonly pin: string,
     readonly role: UserRole,
+    // Quién ejecuta la operación: solo un dueño puede crear cuentas de dueño.
+    readonly actingRole: UserRole,
   ) {}
 }
 
@@ -22,7 +24,10 @@ export class PinAlreadyInUse {}
 
 export class WeakPin {}
 
-export type CreateUserResult = UserCreated | PinAlreadyInUse | WeakPin;
+// Si un encargado pudiera crear o editar dueños, podría auto-promoverse.
+export class OnlyOwnersManageOwners {}
+
+export type CreateUserResult = UserCreated | PinAlreadyInUse | WeakPin | OnlyOwnersManageOwners;
 
 export class CreateUser {
   constructor(
@@ -33,6 +38,9 @@ export class CreateUser {
   ) {}
 
   async execute(input: CreateUserInput): Promise<CreateUserResult> {
+    if (input.role === 'owner' && input.actingRole !== 'owner') {
+      return new OnlyOwnersManageOwners();
+    }
     if (isWeakPin(input.pin)) {
       return new WeakPin();
     }

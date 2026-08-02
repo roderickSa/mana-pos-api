@@ -16,12 +16,18 @@ const createSupplierDto = z.object({
   name: z.string().min(1),
   phone: z.string().min(1).nullish(),
   notes: z.string().min(1).nullish(),
+  visitDays: z.array(z.enum(['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'])).default([]),
+  contactName: z.string().min(1).nullish(),
+  paymentTerms: z.string().min(1).nullish(),
 });
 
 const updateSupplierDto = z.object({
   name: z.string().min(1),
   phone: z.string().min(1).nullish(),
   notes: z.string().min(1).nullish(),
+  visitDays: z.array(z.enum(['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'])).default([]),
+  contactName: z.string().min(1).nullish(),
+  paymentTerms: z.string().min(1).nullish(),
   active: z.boolean(),
 });
 
@@ -31,6 +37,9 @@ function toSupplierResponse(supplier: Supplier): Record<string, unknown> {
     name: supplier.name,
     phone: supplier.phone,
     notes: supplier.notes,
+    visitDays: supplier.visitDays,
+    contactName: supplier.contactName,
+    paymentTerms: supplier.paymentTerms,
     active: supplier.active,
   };
 }
@@ -49,7 +58,16 @@ export function registerSupplierRoutes(
         : '';
     const body = updateSupplierDto.parse(request.body);
     const result = await updateSupplier.execute(
-      new UpdateSupplierInput(id, body.name, body.phone ?? null, body.notes ?? null, body.active),
+      new UpdateSupplierInput(
+        id,
+        body.name,
+        body.phone ?? null,
+        body.notes ?? null,
+        body.visitDays,
+        body.contactName ?? null,
+        body.paymentTerms ?? null,
+        body.active,
+      ),
     );
     if (result instanceof SupplierUpdated) {
       await reply.status(200).send(toSupplierResponse(result.supplier));
@@ -62,7 +80,14 @@ export function registerSupplierRoutes(
   server.post('/suppliers', async (request, reply) => {
     const body = createSupplierDto.parse(request.body);
     const supplier = await createSupplier.execute(
-      new CreateSupplierInput(body.name, body.phone ?? null, body.notes ?? null),
+      new CreateSupplierInput(
+        body.name,
+        body.phone ?? null,
+        body.notes ?? null,
+        body.visitDays,
+        body.contactName ?? null,
+        body.paymentTerms ?? null,
+      ),
     );
     await reply.status(201).send(toSupplierResponse(supplier));
   });

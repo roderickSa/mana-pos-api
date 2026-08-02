@@ -24,14 +24,22 @@ import {
   registerEntryDto,
   searchMovementsDto,
   setCountDto,
-  setExpiryDto,
+  lotExpiryDto,
+  lotWasteDto,
   toMovementResponse,
 } from '#modules/inventory/infrastructure/rest/dtos/inventory.dto.js';
 import {
-  GetExpiringProducts,
-  SetProductExpiry,
-  SetProductExpiryInput,
+  GetExpiringLots,
+  LotNotFoundById,
+  LotRemoved,
+  LotUpdated,
+  RemoveLot,
+  UpdateLotExpiry,
 } from '#modules/inventory/use-cases/expiry/expiry.js';
+import {
+  RegisterLotWaste,
+  RegisterLotWasteInput,
+} from '#modules/inventory/use-cases/register-lot-waste/register-lot-waste.js';
 import type { ExpiryAlertService } from '#modules/settings/use-cases/expiry-alert-service.js';
 import { SearchMovements } from '#modules/inventory/use-cases/search-movements/search-movements.js';
 import { SearchMovementsInput } from '#modules/inventory/use-cases/search-movements/search-movements.input.js';
@@ -43,37 +51,90 @@ export class InventoryController {
     private readonly setStockCount: SetStockCount,
     private readonly getKardex: GetKardex,
     private readonly searchMovements: SearchMovements,
-    private readonly getExpiringProducts: GetExpiringProducts,
-    private readonly setProductExpiry: SetProductExpiry,
+    private readonly getExpiringLots: GetExpiringLots,
+    private readonly updateLotExpiry: UpdateLotExpiry,
+    private readonly removeLot: RemoveLot,
+    private readonly registerLotWaste: RegisterLotWaste,
     private readonly expiryAlertService: ExpiryAlertService,
   ) {}
 
   async expiring(_request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const days = await this.expiryAlertService.getDays();
-    const result = await this.getExpiringProducts.execute(days);
+    const result = await this.getExpiringLots.execute(days);
     const now = new Date();
     await reply.status(200).send({
       alertDays: result.alertDays,
       items: result.items.map((item) => ({
+        lotId: item.lotId,
         productId: item.productId,
         name: item.name,
         saleType: item.saleType,
-        stockQuantity: item.stockQuantity,
+        quantity: item.remainingQuantity,
         expiryDate: item.expiryDate.toISOString(),
+        receivedAt: item.receivedAt.toISOString(),
         daysLeft: item.daysLeft(now),
       })),
     });
   }
 
-  async expiry(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-    const body = setExpiryDto.parse(request.body);
-    await this.setProductExpiry.execute(
-      new SetProductExpiryInput(
-        body.productId,
-        body.expiryDate === null ? null : new Date(`${body.expiryDate}T12:00:00`),
-      ),
+  async updateLot(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const body = lotExpiryDto.parse(request.body);
+    const result = await this.updateLotExpiry.execute(
+      lotIdParam(request),
+      new Date(`${body.expiryDate}T12:00:00`),
     );
-    await reply.status(200).send({ ok: true });
+    if (result instanceof LotNotFoundById) {
+      await reply.status(404).send({ code: 'LOT_NOT_FOUND', lotId: result.lotId });
+      return;
+    }
+    if (result instanceof LotUpdated) {
+      await reply.status(200).send({ ok: true });
+      return;
+    }
+    exhaustive(result);
+  }
+
+  async deleteLot(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const result = await this.removeLot.execute(lotIdParam(request));
+    if (result instanceof LotNotFoundById) {
+      await reply.status(404).send({ code: 'LOT_NOT_FOUND', lotId: result.lotId });
+      return;
+    }
+    if (result instanceof LotRemoved) {
+      await reply.status(200).send({ ok: true });
+      return;
+    }
+    exhaustive(result);
+  }
+
+  async lotWaste(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const body = lotWasteDto.parse(request.body);
+    const userId = request.authUser === null ? 'encargado' : request.authUser.name;
+    const result = await this.registerLotWaste.execute(
+      new RegisterLotWasteInput(lotIdParam(request), body.quantity, userId),
+    );
+    if (result instanceof StockAdjusted) {
+      await reply.status(201).send(toMovementResponse(result.movement));
+      return;
+    }
+    if (result instanceof LotNotFoundById) {
+      await reply.status(404).send({ code: 'LOT_NOT_FOUND', lotId: result.lotId });
+      return;
+    }
+    if (result instanceof ProductNotFoundInInventory) {
+      await reply.status(404).send({ code: 'PRODUCT_NOT_FOUND', productId: result.productId });
+      return;
+    }
+    if (result instanceof AdjustmentExceedsStock) {
+      await reply.status(409).send({
+        code: 'ADJUSTMENT_EXCEEDS_STOCK',
+        productId: result.productId,
+        availableQuantity: result.availableQuantity,
+        requestedQuantity: result.requestedQuantity,
+      });
+      return;
+    }
+    exhaustive(result);
   }
 
   async movements(request: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -195,6 +256,14 @@ export class InventoryController {
     }
     exhaustive(result);
   }
+}
+
+function lotIdParam(request: FastifyRequest): string {
+  const params = request.params;
+  if (typeof params === 'object' && params !== null && 'id' in params && typeof params.id === 'string') {
+    return params.id;
+  }
+  throw new Error('Missing lot id param');
 }
 
 function productIdParam(request: FastifyRequest): string {

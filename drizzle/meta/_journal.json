@@ -141,6 +141,41 @@
       "when": 1785556400000,
       "tag": "0019_last-login",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1785646400000,
+      "tag": "0020_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1785736400000,
+      "tag": "0021_purchase-receptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1785826400000,
+      "tag": "0022_product-lots",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1785916400000,
+      "tag": "0023_closing-note",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1786006400000,
+      "tag": "0024_supplier-details",
+      "breakpoints": true
     }
   ]
 }

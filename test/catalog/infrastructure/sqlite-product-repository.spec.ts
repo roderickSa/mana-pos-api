@@ -22,7 +22,7 @@ describe('SqliteProductRepository', () => {
 
   async function seedSupplier(id: string): Promise<void> {
     await new SqliteSupplierRepository(db).save(
-      new Supplier(id, `Proveedor ${id}`, null, null, true, new Date('2026-07-01T08:00:00.000Z')),
+      new Supplier(id, `Proveedor ${id}`, null, null, [], null, null, true, new Date('2026-07-01T08:00:00.000Z')),
     );
   }
 

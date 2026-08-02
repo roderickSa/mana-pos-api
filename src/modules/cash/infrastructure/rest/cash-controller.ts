@@ -29,6 +29,7 @@ import {
 import {
   CloseCashSession,
   CloseCashSessionInput,
+  ClosingNoteRequired,
   NoSessionToClose,
   SessionClosed,
 } from '#modules/cash/use-cases/close-cash-session/close-cash-session.js';
@@ -55,6 +56,7 @@ const movementDto = z.object({
 const closeDto = z.object({
   countedCashCents: z.number().int().nonnegative(),
   userId: z.string().min(1).default('encargado'),
+  note: z.string().max(200).nullish(),
 });
 
 function toSessionResponse(session: CashSession): Record<string, unknown> {
@@ -68,6 +70,8 @@ function toSessionResponse(session: CashSession): Record<string, unknown> {
     closedAt: session.closedAt?.toISOString() ?? null,
     expectedCashCents: session.expectedCashCents,
     countedCashCents: session.countedCashCents,
+    closedBy: session.closedBy,
+    closingNote: session.closingNote,
   };
 }
 
@@ -209,7 +213,7 @@ export class CashController {
   async close(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const body = closeDto.parse(request.body);
     const result = await this.closeCashSession.execute(
-      new CloseCashSessionInput(body.countedCashCents, body.userId),
+      new CloseCashSessionInput(body.countedCashCents, body.userId, body.note ?? null),
     );
     if (result instanceof SessionClosed) {
       await reply.status(200).send({
@@ -224,6 +228,15 @@ export class CashController {
       await reply.status(409).send({
         code: 'NO_SESSION_OPEN',
         message: 'No hay caja abierta que cerrar.',
+      });
+      return;
+    }
+    if (result instanceof ClosingNoteRequired) {
+      const soles = (Math.abs(result.differenceCents) / 100).toFixed(2);
+      await reply.status(409).send({
+        code: 'NOTE_REQUIRED',
+        differenceCents: result.differenceCents,
+        message: `El conteo no cuadra (${result.differenceCents > 0 ? 'sobran' : 'faltan'} S/ ${soles}). Explica el motivo para poder cerrar.`,
       });
       return;
     }

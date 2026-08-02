@@ -1,7 +1,9 @@
 import type { IdGenerator } from '#shared/ports/id-generator.js';
 import type { TimeManager } from '#shared/ports/time-manager.js';
+import { ProductLot } from '#modules/inventory/domain/product-lot.js';
 import { StockMovement } from '#modules/inventory/domain/stock-movement.js';
 import type { InventoryRepository } from '#modules/inventory/ports/inventory-repository.js';
+import type { LotRepository } from '#modules/inventory/ports/lot-repository.js';
 import type { RegisterStockEntryInput } from '#modules/inventory/use-cases/register-stock-entry/register-stock-entry.input.js';
 import {
   ProductNotFoundInInventory,
@@ -12,6 +14,7 @@ import {
 export class RegisterStockEntry {
   constructor(
     private readonly inventoryRepository: InventoryRepository,
+    private readonly lotRepository: LotRepository,
     private readonly idGenerator: IdGenerator,
     private readonly timeManager: TimeManager,
   ) {}
@@ -48,8 +51,18 @@ export class RegisterStockEntry {
     if (input.unitCostCents !== null) {
       await this.inventoryRepository.setProductCost(input.productId, input.unitCostCents);
     }
+    // Cada entrada con fecha crea su LOTE: la fecha nueva ya no pisa la de
+    // entradas anteriores — cada tanda vence cuando le toca.
     if (input.expiryDate !== null) {
-      await this.inventoryRepository.setProductExpiry(input.productId, input.expiryDate);
+      await this.lotRepository.save(
+        new ProductLot(
+          this.idGenerator.generate(),
+          input.productId,
+          input.quantity,
+          input.expiryDate,
+          movement.createdAt,
+        ),
+      );
     }
     return new StockEntryRegistered(movement);
   }

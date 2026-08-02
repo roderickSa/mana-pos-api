@@ -60,7 +60,12 @@ import {
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import fastifyStatic from '@fastify/static';
-import { BackupScheduler } from '#shared/infrastructure/backup/backup-scheduler.js';
+import { SqliteBackupEngine } from '#modules/backups/infrastructure/sqlite-backup-engine.js';
+import { SettingsExternalDirStore } from '#modules/backups/infrastructure/settings-external-dir-store.js';
+import { registerBackupsRoutes } from '#modules/backups/infrastructure/rest/backups-routes.js';
+import { GetBackupStatus } from '#modules/backups/use-cases/get-backup-status.js';
+import { RunBackupNow } from '#modules/backups/use-cases/run-backup-now.js';
+import { ExternalDirService } from '#modules/backups/use-cases/external-dir-service.js';
 import { SqliteSettingsRepository } from '#modules/settings/infrastructure/repositories/sqlite-settings-repository.js';
 import { registerSettingsRoutes } from '#modules/settings/infrastructure/rest/settings-routes.js';
 import { ReceiptConfigService } from '#modules/settings/use-cases/receipt-config-service.js';
@@ -108,7 +113,15 @@ import { SqliteUserRepository } from '#modules/users/infrastructure/repositories
 import { ScryptPinHasher } from '#modules/users/infrastructure/services/scrypt-pin-hasher.js';
 import { UsersController } from '#modules/users/infrastructure/rest/users-controller.js';
 import { registerUsersRoutes } from '#modules/users/infrastructure/rest/users-routes.js';
-import { CreateUser, CreateUserInput } from '#modules/users/use-cases/create-user/create-user.js';
+import {
+  CreateUser,
+  CreateUserInput,
+  UserCreated,
+} from '#modules/users/use-cases/create-user/create-user.js';
+import { Logout } from '#modules/users/use-cases/logout/logout.js';
+import { ValidateSession } from '#modules/users/use-cases/validate-session/validate-session.js';
+import { SqliteSessionRepository } from '#modules/users/infrastructure/repositories/sqlite-session-repository.js';
+import { AuthGuard } from '#modules/users/infrastructure/rest/auth-guard.js';
 import { ListUsers } from '#modules/users/use-cases/list-users/list-users.js';
 import { LoginWithPin } from '#modules/users/use-cases/login-with-pin/login-with-pin.js';
 import { UpdateUser } from '#modules/users/use-cases/update-user/update-user.js';
@@ -118,14 +131,18 @@ import { SqliteCashInflowSource } from '#modules/cash/infrastructure/services/sq
 import { CashController } from '#modules/cash/infrastructure/rest/cash-controller.js';
 import { PrintCloseSummary } from '#modules/cash/use-cases/print-close-summary/print-close-summary.js';
 import {
-  GetExpiringProducts,
-  SetProductExpiry,
+  GetExpiringLots,
+  RemoveLot,
+  UpdateLotExpiry,
 } from '#modules/inventory/use-cases/expiry/expiry.js';
+import { RegisterLotWaste } from '#modules/inventory/use-cases/register-lot-waste/register-lot-waste.js';
+import { SqliteLotRepository } from '#modules/inventory/infrastructure/repositories/sqlite-lot-repository.js';
 import { ExpiryAlertService } from '#modules/settings/use-cases/expiry-alert-service.js';
 import { IgvService } from '#modules/settings/use-cases/igv-service.js';
 import { registerCashRoutes } from '#modules/cash/infrastructure/rest/cash-routes.js';
 import { OpenCashSession } from '#modules/cash/use-cases/open-cash-session/open-cash-session.js';
 import { SqlitePurchaseOrderRepository } from '#modules/purchases/infrastructure/repositories/sqlite-purchase-order-repository.js';
+import { SqlitePurchaseReceptionRepository } from '#modules/purchases/infrastructure/repositories/sqlite-purchase-reception-repository.js';
 import { SqlitePurchaseProductLookup } from '#modules/purchases/infrastructure/services/sqlite-purchase-product-lookup.js';
 import { registerPurchasesRoutes } from '#modules/purchases/infrastructure/rest/purchases-routes.js';
 import { CreatePurchaseOrder } from '#modules/purchases/use-cases/create-purchase-order/create-purchase-order.js';
@@ -190,7 +207,13 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
   );
 
   const inventoryRepository = new SqliteInventoryRepository(db);
-  const registerStockEntry = new RegisterStockEntry(inventoryRepository, idGenerator, timeManager);
+  const lotRepository = new SqliteLotRepository(db);
+  const registerStockEntry = new RegisterStockEntry(
+    inventoryRepository,
+    lotRepository,
+    idGenerator,
+    timeManager,
+  );
   const registerStockAdjustment = new RegisterStockAdjustment(
     inventoryRepository,
     idGenerator,
@@ -205,13 +228,13 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     registerStockEntry,
     createSupplier,
     listSuppliers,
+    searchProducts,
   );
 
   const settingsRepository = new SqliteSettingsRepository(db);
   const expiryAlertService = new ExpiryAlertService(settingsRepository);
   const igvService = new IgvService(settingsRepository);
-  const getExpiringProducts = new GetExpiringProducts(inventoryRepository, timeManager);
-  const setProductExpiry = new SetProductExpiry(inventoryRepository);
+  const getExpiringLots = new GetExpiringLots(lotRepository, timeManager);
 
   const inventoryController = new InventoryController(
     registerStockEntry,
@@ -219,15 +242,24 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     setStockCount,
     getKardex,
     searchMovements,
-    getExpiringProducts,
-    setProductExpiry,
+    getExpiringLots,
+    new UpdateLotExpiry(lotRepository),
+    new RemoveLot(lotRepository),
+    new RegisterLotWaste(lotRepository, registerStockAdjustment),
     expiryAlertService,
   );
 
   const server = fastify({ logger: true });
 
+  const externalDirStore = new SettingsExternalDirStore(settingsRepository);
+  const backupEngine = new SqliteBackupEngine(
+    databasePath,
+    config.backupsDir,
+    () => externalDirStore.get(),
+    server.log,
+  );
   if (databasePath !== ':memory:' && !config.training) {
-    new BackupScheduler(databasePath, config.backupsDir, server.log).start();
+    backupEngine.start();
   }
 
   const ticketRepository = new SqliteTicketRepository(db);
@@ -304,7 +336,21 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
 
   const userRepository = new SqliteUserRepository(db);
   const pinHasher = new ScryptPinHasher();
-  const loginWithPin = new LoginWithPin(userRepository, pinHasher, timeManager);
+  const sessionRepository = new SqliteSessionRepository(db);
+  const loginWithPin = new LoginWithPin(
+    userRepository,
+    pinHasher,
+    sessionRepository,
+    idGenerator,
+    timeManager,
+  );
+  const logout = new Logout(sessionRepository, timeManager);
+  // El guard va ANTES de registrar rutas: valida Bearer + rol mínimo en todo
+  // endpoint de API (la política vive en route-policy.ts).
+  const authGuard = new AuthGuard(
+    new ValidateSession(sessionRepository, userRepository, timeManager),
+  );
+  server.addHook('onRequest', (request, reply) => authGuard.handle(request, reply));
   const verifyManagerPin = new VerifyManagerPin(userRepository, pinHasher);
   const createUser = new CreateUser(userRepository, pinHasher, idGenerator, timeManager);
   const updateUser = new UpdateUser(userRepository, pinHasher);
@@ -315,6 +361,7 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     createUser,
     updateUser,
     listUsers,
+    logout,
   );
 
   const checkout = new Checkout(
@@ -385,14 +432,21 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     categoryRepository,
   );
   const purchaseOrderRepository = new SqlitePurchaseOrderRepository(db);
+  const purchaseReceptionRepository = new SqlitePurchaseReceptionRepository(db);
   const purchaseProductLookup = new SqlitePurchaseProductLookup(db);
   registerPurchasesRoutes(
     server,
     new CreatePurchaseOrder(purchaseOrderRepository, purchaseProductLookup, supplierLookup, idGenerator, timeManager),
     new ListPurchaseOrders(purchaseOrderRepository),
-    new GetPurchaseOrder(purchaseOrderRepository),
+    new GetPurchaseOrder(purchaseOrderRepository, purchaseReceptionRepository),
     new CancelPurchaseOrder(purchaseOrderRepository, timeManager),
-    new ReceivePurchaseOrder(purchaseOrderRepository, new InventoryStockReceiver(registerStockEntry), timeManager),
+    new ReceivePurchaseOrder(
+      purchaseOrderRepository,
+      new InventoryStockReceiver(registerStockEntry),
+      purchaseReceptionRepository,
+      idGenerator,
+      timeManager,
+    ),
   );
 
   registerCatalogRoutes(server, catalogController, importProductsController, categoriesController);
@@ -404,6 +458,12 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
   registerCashRoutes(server, cashController);
   registerUsersRoutes(server, usersController);
   registerSettingsRoutes(server, receiptConfigService, expiryAlertService, igvService);
+  registerBackupsRoutes(
+    server,
+    new GetBackupStatus(backupEngine),
+    new RunBackupNow(backupEngine),
+    new ExternalDirService(externalDirStore, backupEngine),
+  );
 
   // Producción local: si el front está compilado, la API lo sirve en el mismo
   // puerto (un solo origen, sin Vite). Rutas no-API caen al index (SPA).
@@ -421,13 +481,23 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
   }
 
   // Primera vez: crea el encargado inicial (PIN 1234) para poder entrar.
-  void userRepository.countUsers().then(async (count) => {
-    if (count === 0) {
-      await createUser.execute(new CreateUserInput('Encargado', '1234', 'manager'));
-      server.log.warn({
-        event: 'default_manager_created',
-        msg: 'Usuario inicial "Encargado" creado con PIN 1234 — cámbialo en la sección Usuarios',
-      });
+  void userRepository.countUsers().then(async () => {
+    // El dueño se siembra también en BDs existentes (iteración 4): en una BD
+    // fresca es el primer usuario, y desde él se crean encargados y cajeras.
+    const users = await userRepository.findAll();
+    if (!users.some((user) => user.isOwner())) {
+      const seeded = await createUser.execute(new CreateUserInput('Dueño', '2580', 'owner', 'owner'));
+      if (seeded instanceof UserCreated) {
+        server.log.warn({
+          event: 'default_owner_created',
+          msg: 'Usuario "Dueño" creado con PIN 2580 — cámbialo YA en Ajustes → Usuarios',
+        });
+      } else {
+        server.log.error({
+          event: 'default_owner_seed_failed',
+          msg: 'No se pudo crear el usuario "Dueño" (¿PIN 2580 en uso?) — créalo a mano en Ajustes → Usuarios',
+        });
+      }
     }
   });
 

@@ -29,6 +29,7 @@ export class SqliteCashSessionRepository implements CashSessionRepository {
       closedAt: session.closedAt,
       expectedCashCents: session.expectedCashCents,
       countedCashCents: session.countedCashCents,
+      closingNote: session.closingNote,
     };
     await this.db.insert(cashSessions).values(row).onConflictDoUpdate({ target: cashSessions.id, set: row });
   }
@@ -93,6 +94,7 @@ function toSession(row: SessionRow): CashSession {
     row.closedAt,
     row.expectedCashCents,
     row.countedCashCents,
+    row.closingNote,
   );
 }
 

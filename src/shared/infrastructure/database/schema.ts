@@ -8,6 +8,10 @@ export const suppliers = sqliteTable('suppliers', {
   name: text('name').notNull(),
   phone: text('phone'),
   notes: text('notes'),
+  // CSV de días ('lun,mar'): alimenta la sugerencia de órdenes.
+  visitDays: text('visit_days'),
+  contactName: text('contact_name'),
+  paymentTerms: text('payment_terms'),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
@@ -124,6 +128,47 @@ export const purchaseOrderLines = sqliteTable(
   (table) => [index('purchase_order_lines_order_idx').on(table.orderId)],
 );
 
+// Historia tanda a tanda de las recepciones: la orden guarda el acumulado,
+// aquí queda cada entrega (fecha, quién recibió, cantidades y costo real).
+export const purchaseReceptions = sqliteTable('purchase_receptions', {
+  id: text('id').primaryKey(),
+  orderId: text('order_id')
+    .notNull()
+    .references(() => purchaseOrders.id),
+  receivedAt: integer('received_at', { mode: 'timestamp_ms' }).notNull(),
+  receivedBy: text('received_by').notNull(),
+});
+
+export const purchaseReceptionLines = sqliteTable('purchase_reception_lines', {
+  id: text('id').primaryKey(),
+  receptionId: text('reception_id')
+    .notNull()
+    .references(() => purchaseReceptions.id),
+  productId: text('product_id')
+    .notNull()
+    .references(() => products.id),
+  quantity: integer('quantity').notNull(),
+  unitCostCents: integer('unit_cost_cents').notNull(),
+  expiryDate: integer('expiry_date', { mode: 'timestamp_ms' }),
+});
+
+// Lotes: cada entrada con fecha de vencimiento crea uno. El stock del
+// producto sigue siendo un contador único; los lotes recuerdan qué parte
+// vence cuándo (products.expiry_date queda como columna legacy sin uso).
+export const productLots = sqliteTable(
+  'product_lots',
+  {
+    id: text('id').primaryKey(),
+    productId: text('product_id')
+      .notNull()
+      .references(() => products.id),
+    quantity: integer('quantity').notNull(),
+    expiryDate: integer('expiry_date', { mode: 'timestamp_ms' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [index('product_lots_product_idx').on(table.productId)],
+);
+
 export const stockMovements = sqliteTable(
   'stock_movements',
   {
@@ -152,10 +197,21 @@ export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   pinHash: text('pin_hash').notNull(),
-  role: text('role', { enum: ['manager', 'cashier'] }).notNull(),
+  role: text('role', { enum: ['owner', 'manager', 'cashier'] }).notNull(),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
+});
+
+// Sesiones de login por token opaco: el API valida el Bearer en cada request.
+export const sessions = sqliteTable('sessions', {
+  token: text('token').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
 });
 
 export const cashSessions = sqliteTable(
@@ -171,6 +227,7 @@ export const cashSessions = sqliteTable(
     closedAt: integer('closed_at', { mode: 'timestamp_ms' }),
     expectedCashCents: integer('expected_cash_cents'),
     countedCashCents: integer('counted_cash_cents'),
+    closingNote: text('closing_note'),
   },
   (table) => [index('cash_sessions_status_idx').on(table.status)],
 );

@@ -13,12 +13,6 @@ export const registerEntryDto = z.object({
   userId: z.string().min(1).default('encargado'),
 });
 
-export const setExpiryDto = z.object({
-  productId: z.string().min(1),
-  // null limpia la fecha de vencimiento.
-  expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
-});
-
 export const registerAdjustmentDto = z.object({
   productId: z.string().min(1),
   kind: z.enum(['waste', 'expiry', 'theft']),
@@ -57,3 +51,7 @@ export function toMovementResponse(movement: StockMovement): Record<string, unkn
     createdAt: movement.createdAt.toISOString(),
   };
 }
+
+export const lotExpiryDto = z.object({ expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
+
+export const lotWasteDto = z.object({ quantity: z.number().int().positive() });

@@ -9,6 +9,7 @@ import {
   CloseCashSession,
   CloseCashSessionInput,
   SessionClosed,
+  ClosingNoteRequired,
 } from '#modules/cash/use-cases/close-cash-session/close-cash-session.js';
 import {
   GetCashStatus,
@@ -124,19 +125,41 @@ describe('Cash sessions', () => {
     expect(result).toBeInstanceOf(MovementExceedsCash);
   });
 
-  it('closes with arqueo: expected vs counted with difference', async () => {
+  it('closes with arqueo: a difference demands a note and then closes with it', async () => {
     const { openSession, close, inflow } = build();
     await openSession.execute(new OpenCashSessionInput('morning', 5000, 'encargado'));
     inflow.cashSales = 10000;
 
-    const result = await close.execute(new CloseCashSessionInput(14800, 'encargado'));
+    // Sin nota, el descuadre no cierra: siempre se explica.
+    const rejected = await close.execute(new CloseCashSessionInput(14800, 'encargado', null));
+    expect(rejected).toBeInstanceOf(ClosingNoteRequired);
+    if (rejected instanceof ClosingNoteRequired) {
+      expect(rejected.differenceCents).toBe(-200);
+    }
+
+    const result = await close.execute(
+      new CloseCashSessionInput(14800, 'encargado', 'faltó sencillo del vuelto'),
+    );
 
     expect(result).toBeInstanceOf(SessionClosed);
     if (!(result instanceof SessionClosed)) return;
     expect(result.session.expectedCashCents).toBe(15000);
     expect(result.session.countedCashCents).toBe(14800);
     expect(result.differenceCents).toBe(-200);
+    expect(result.session.closingNote).toBe('faltó sencillo del vuelto');
     expect(result.session.isOpen()).toBe(false);
+  });
+
+  it('closes without note when the count matches exactly', async () => {
+    const { openSession, close, inflow } = build();
+    await openSession.execute(new OpenCashSessionInput('morning', 5000, 'encargado'));
+    inflow.cashSales = 10000;
+
+    const result = await close.execute(new CloseCashSessionInput(15000, 'encargado', null));
+
+    expect(result).toBeInstanceOf(SessionClosed);
+    if (!(result instanceof SessionClosed)) return;
+    expect(result.session.closingNote).toBeNull();
   });
 
   it('registers movements normally after a valid withdrawal', async () => {

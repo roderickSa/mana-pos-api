@@ -6,6 +6,7 @@ import type {
   PurchaseOrder,
   PurchaseOrderSummary,
 } from '#modules/purchases/domain/purchase-order.js';
+import type { PurchaseReception } from '#modules/purchases/domain/purchase-reception.js';
 import { CreatePurchaseOrder } from '#modules/purchases/use-cases/create-purchase-order/create-purchase-order.js';
 import {
   CreatePurchaseOrderInput,
@@ -94,7 +95,10 @@ function toLineResponse(order: PurchaseOrder): Record<string, unknown>[] {
   }));
 }
 
-function toOrderResponse(order: PurchaseOrder): Record<string, unknown> {
+function toOrderResponse(
+  order: PurchaseOrder,
+  receptions: PurchaseReception[] = [],
+): Record<string, unknown> {
   return {
     id: order.id,
     number: order.number,
@@ -105,6 +109,17 @@ function toOrderResponse(order: PurchaseOrder): Record<string, unknown> {
     createdAt: order.createdAt.toISOString(),
     totalCents: order.totalCents(),
     lines: toLineResponse(order),
+    receptions: receptions.map((reception) => ({
+      id: reception.id,
+      receivedAt: reception.receivedAt.toISOString(),
+      receivedBy: reception.receivedBy,
+      lines: reception.lines.map((line) => ({
+        productId: line.productId,
+        quantity: line.quantity,
+        unitCostCents: line.unitCostCents,
+        expiryDate: line.expiryDate === null ? null : line.expiryDate.toISOString(),
+      })),
+    })),
   };
 }
 
@@ -231,7 +246,7 @@ export function registerPurchasesRoutes(
   server.get('/purchases/orders/:id', async (request, reply) => {
     const result = await getPurchaseOrder.execute(orderIdParam(request));
     if (result instanceof PurchaseOrderFound) {
-      await reply.status(200).send(toOrderResponse(result.order));
+      await reply.status(200).send(toOrderResponse(result.order, result.receptions));
       return;
     }
     if (result instanceof PurchaseOrderNotFoundById) {
