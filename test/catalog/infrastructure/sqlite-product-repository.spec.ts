@@ -69,16 +69,16 @@ describe('SqliteProductRepository', () => {
     await repository.save(weightProductMother({ id: 'p3', name: 'Plátano de seda' }));
     await repository.save(unitProductMother({ id: 'p4', name: 'Trapo industrial', barcode: '4', active: false }));
 
-    const byQuery = await repository.search(new SearchProductsParams('inca 600', null, null, false, false, false, false, false, 50, 0));
+    const byQuery = await repository.search(new SearchProductsParams('inca 600', null, null, false, false, false, false, 'default', false, 50, 0));
     expect(byQuery.map((product) => product.id)).toEqual(['p1']);
 
-    const byAccent = await repository.search(new SearchProductsParams('platano', null, null, false, false, false, false, false, 50, 0));
+    const byAccent = await repository.search(new SearchProductsParams('platano', null, null, false, false, false, false, 'default', false, 50, 0));
     expect(byAccent.map((product) => product.id)).toEqual(['p3']);
 
-    const activeOnly = await repository.search(new SearchProductsParams('trapo', null, null, false, false, false, false, false, 50, 0));
+    const activeOnly = await repository.search(new SearchProductsParams('trapo', null, null, false, false, false, false, 'default', false, 50, 0));
     expect(activeOnly).toHaveLength(0);
 
-    const quickAccessOnly = await repository.search(new SearchProductsParams(null, null, null, true, false, false, false, false, 50, 0));
+    const quickAccessOnly = await repository.search(new SearchProductsParams(null, null, null, true, false, false, false, 'default', false, 50, 0));
     expect(quickAccessOnly.map((product) => product.id)).toEqual(['p3']);
   });
 
@@ -93,7 +93,7 @@ describe('SqliteProductRepository', () => {
     expect((await repository.findById('p3'))?.supplierIds).toEqual([]);
 
     const ofProv1 = await repository.search(
-      new SearchProductsParams(null, null, 'prov-1', false, false, false, false, false, 50, 0),
+      new SearchProductsParams(null, null, 'prov-1', false, false, false, false, 'default', false, 50, 0),
     );
     expect(ofProv1.map((product) => product.id)).toEqual(['p1']);
 

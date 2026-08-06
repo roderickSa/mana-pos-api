@@ -1,4 +1,5 @@
 import type { Nullable } from '#shared/domain/nullable.js';
+import type { ProductOrder } from '#modules/catalog/ports/search-products-params.js';
 
 export class SearchProductsInput {
   constructor(
@@ -9,7 +10,8 @@ export class SearchProductsInput {
     readonly onlyLowStock: boolean,
     readonly onlyMissingCost: boolean,
     readonly includeInactive: boolean,
-    readonly orderBySales: boolean,
+    readonly orderBy: ProductOrder,
+    readonly descending: boolean,
     readonly limit: number,
     readonly offset: number,
   ) {}

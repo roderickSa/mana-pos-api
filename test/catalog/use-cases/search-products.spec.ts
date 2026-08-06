@@ -17,34 +17,34 @@ describe('SearchProducts', () => {
   });
 
   it('matches ignoring accents and case', async () => {
-    const found = await useCase.execute(new SearchProductsInput('CAFE', null, null, false, false, false, false, false, 50, 0));
+    const found = await useCase.execute(new SearchProductsInput('CAFE', null, null, false, false, false, false, 'default', false, 50, 0));
 
     expect(found.items.map((product) => product.id)).toEqual(['p2']);
     expect(found.total).toBe(1);
   });
 
   it('matches partial multi-token queries', async () => {
-    const found = await useCase.execute(new SearchProductsInput('inca 600', null, null, false, false, false, false, false, 50, 0));
+    const found = await useCase.execute(new SearchProductsInput('inca 600', null, null, false, false, false, false, 'default', false, 50, 0));
 
     expect(found.items.map((product) => product.id)).toEqual(['p1']);
   });
 
   it('filters by category', async () => {
     const found = await useCase.execute(
-      new SearchProductsInput(null, 'frutas-verduras', null, false, false, false, false, false, 50, 0),
+      new SearchProductsInput(null, 'frutas-verduras', null, false, false, false, false, 'default', false, 50, 0),
     );
 
     expect(found.items.map((product) => product.id)).toEqual(['p3']);
   });
 
   it('excludes inactive products by default', async () => {
-    const found = await useCase.execute(new SearchProductsInput('pilsen', null, null, false, false, false, false, false, 50, 0));
+    const found = await useCase.execute(new SearchProductsInput('pilsen', null, null, false, false, false, false, 'default', false, 50, 0));
 
     expect(found.items).toHaveLength(0);
   });
 
   it('treats a blank query as no query filter', async () => {
-    const found = await useCase.execute(new SearchProductsInput('   ', null, null, false, false, false, false, false, 50, 0));
+    const found = await useCase.execute(new SearchProductsInput('   ', null, null, false, false, false, false, 'default', false, 50, 0));
 
     expect(found.items).toHaveLength(3);
     expect(found.total).toBe(3);

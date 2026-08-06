@@ -13,6 +13,9 @@ export function registerInventoryRoutes(
     controller.kardex(request, reply),
   );
   server.get('/inventory/movements', (request, reply) => controller.movements(request, reply));
+  server.get('/inventory/movements/export.csv', (request, reply) =>
+    controller.exportMovementsCsv(request, reply),
+  );
   server.get('/inventory/expiring', (request, reply) => controller.expiring(request, reply));
   server.put('/inventory/lots/:id', (request, reply) => controller.updateLot(request, reply));
   server.delete('/inventory/lots/:id', (request, reply) => controller.deleteLot(request, reply));

@@ -162,6 +162,39 @@ export class InventoryController {
     });
   }
 
+  // Mismo criterio que el export de Ventas: los filtros vigentes, hasta
+  // 10000 filas, en CSV legible por Excel.
+  async exportMovementsCsv(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const query = searchMovementsDto.parse(request.query);
+    const result = await this.searchMovements.execute(
+      new SearchMovementsInput(
+        query.query ?? null,
+        query.kind ?? null,
+        query.from === undefined ? null : new Date(`${query.from}T00:00:00`),
+        query.to === undefined ? null : new Date(`${query.to}T23:59:59.999`),
+        10000,
+        0,
+      ),
+    );
+    const header = 'fecha,hora,producto,tipo,cantidad,valor_soles,usuario,motivo';
+    const rows = result.items.map((item) => {
+      const movement = item.movement;
+      const fecha = movement.createdAt.toLocaleDateString('es-PE');
+      const hora = movement.createdAt.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+      const tipo = MOVEMENT_KIND_CSV[movement.kind] ?? movement.kind;
+      const valor = movement.valueCents === null ? '' : (movement.valueCents / 100).toFixed(2);
+      const campos = [item.productName, tipo, movement.userId, movement.reason ?? ''].map(csvField);
+      return `${fecha},${hora},${campos[0]},${campos[1]},${movement.quantity},${valor},${campos[2]},${campos[3]}`;
+    });
+    const csv = `﻿${header}\n${rows.join('\n')}\n`;
+
+    await reply
+      .status(200)
+      .header('content-disposition', 'attachment; filename="kardex-mana.csv"')
+      .type('text/csv; charset=utf-8')
+      .send(csv);
+  }
+
   async entry(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const body = registerEntryDto.parse(request.body);
     const result = await this.registerStockEntry.execute(
@@ -246,7 +279,10 @@ export class InventoryController {
       await reply.status(200).send({
         productId: result.productId,
         currentQuantity: result.currentQuantity,
-        movements: result.movements.map(toMovementResponse),
+        movements: result.entries.map((entry) => ({
+          ...toMovementResponse(entry.movement),
+          balanceAfter: entry.balanceAfter,
+        })),
       });
       return;
     }
@@ -256,6 +292,22 @@ export class InventoryController {
     }
     exhaustive(result);
   }
+}
+
+const MOVEMENT_KIND_CSV: Record<string, string> = {
+  sale: 'venta',
+  sale_reversal: 'devolución por anulación',
+  purchase: 'entrada',
+  waste: 'merma',
+  expiry: 'vencimiento',
+  theft: 'robo/pérdida',
+  count: 'conteo',
+  refund: 'devolución',
+};
+
+// Campos con comas o comillas van entre comillas (regla CSV estándar).
+function csvField(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
 function lotIdParam(request: FastifyRequest): string {

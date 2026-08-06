@@ -155,15 +155,28 @@ export class SqliteProductRepository implements ProductRepository {
       WHERE sm.product_id = ${products.id} AND sm.type = 'sale'
     )`;
 
+    const direction = params.descending ? sql`DESC` : sql`ASC`;
+    // Margen relativo; sin costo no hay margen — esos van SIEMPRE al final,
+    // suba o baje el orden.
+    const margin = sql`CASE
+      WHEN ${products.costCents} > 0 AND ${products.priceCents} > 0
+      THEN (${products.priceCents} - ${products.costCents}) * 1.0 / ${products.priceCents}
+      ELSE ${params.descending ? sql`-1e9` : sql`1e9`}
+    END`;
+    const orderColumns = {
+      default: [sql`${products.quickAccess} DESC`, products.name],
+      sales: [sql`${products.quickAccess} DESC`, sql`${soldQuantity} DESC`, products.name],
+      name: [sql`${products.name} COLLATE NOCASE ${direction}`],
+      price: [sql`${products.priceCents} ${direction}`, products.name],
+      stock: [sql`${products.stockQuantity} ${direction}`, products.name],
+      margin: [sql`${margin} ${direction}`, products.name],
+    }[params.orderBy];
+
     const rows = await this.db
       .select()
       .from(products)
       .where(and(...this.searchConditions(params)))
-      .orderBy(
-        ...(params.orderBySales
-          ? [sql`${products.quickAccess} DESC`, sql`${soldQuantity} DESC`, products.name]
-          : [sql`${products.quickAccess} DESC`, products.name]),
-      )
+      .orderBy(...orderColumns)
       .limit(params.limit)
       .offset(params.offset);
 

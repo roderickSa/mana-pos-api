@@ -236,12 +236,14 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
   const getKardex = new GetKardex(inventoryRepository);
   const searchMovements = new SearchMovements(inventoryRepository);
 
+  const categoryRepository = new SqliteCategoryRepository(db);
   const importProductsController = new ImportProductsController(
     createProduct,
     registerStockEntry,
     createSupplier,
     listSuppliers,
     searchProducts,
+    new ListCategories(categoryRepository),
   );
 
   const settingsRepository = new SqliteSettingsRepository(db);
@@ -463,7 +465,6 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     }
   });
 
-  const categoryRepository = new SqliteCategoryRepository(db);
   const categoriesController = new CategoriesController(
     new ListCategories(categoryRepository),
     new CreateCategory(categoryRepository, timeManager),

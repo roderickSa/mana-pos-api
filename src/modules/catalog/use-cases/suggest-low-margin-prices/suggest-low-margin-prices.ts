@@ -46,7 +46,7 @@ export class SuggestLowMarginPrices {
 
   async execute(input: SuggestLowMarginPricesInput): Promise<LowMarginSuggestions> {
     const products = await this.productRepository.search(
-      new SearchProductsParams(null, null, null, false, false, false, false, false, ALL_PRODUCTS, 0),
+      new SearchProductsParams(null, null, null, false, false, false, false, 'default', false, ALL_PRODUCTS, 0),
     );
 
     const items: PriceSuggestion[] = [];

@@ -16,6 +16,11 @@ describe('route policy', () => {
     expect(resolveAccess('PUT', '/backups/external-dir')).toBe('owner');
   });
 
+  it('lets cashiers read expiring lots (Vender marca los vencidos)', () => {
+    expect(resolveAccess('GET', '/inventory/expiring')).toBe('cashier');
+    expect(resolveAccess('POST', '/inventory/expiring')).toBe('manager');
+  });
+
   it('gives the back office to managers (owner ve lo mismo por jerarquía)', () => {
     expect(resolveAccess('POST', '/inventory/entries')).toBe('manager');
     expect(resolveAccess('GET', '/purchases/orders')).toBe('manager');

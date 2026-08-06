@@ -24,7 +24,8 @@ export class SearchProducts {
       input.onlyLowStock,
       input.onlyMissingCost,
       input.includeInactive,
-      input.orderBySales,
+      input.orderBy,
+      input.descending,
       input.limit,
       input.offset,
     );

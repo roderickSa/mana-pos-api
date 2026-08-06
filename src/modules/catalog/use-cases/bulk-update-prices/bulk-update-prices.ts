@@ -36,6 +36,7 @@ export class BulkUpdatePrices {
         false,
         false,
         false,
+        'default',
         false,
         ALL_PRODUCTS,
         0,

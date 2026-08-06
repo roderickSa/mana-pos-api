@@ -40,7 +40,9 @@ const RULES: Rule[] = [
   // Lo técnico/sensible es del dueño (decisión de Roder 02-ago): respaldos.
   { method: '*', pattern: /^\/backups/, access: 'owner' },
   { method: '*', pattern: /^\/settings/, access: 'manager' },
-  // Trastienda: encargado.
+  // Trastienda: encargado. Excepción: los lotes por vencer los lee también
+  // la cajera — Vender marca los productos vencidos en la grilla.
+  { method: 'GET', pattern: /^\/inventory\/expiring$/, access: 'cashier' },
   { method: '*', pattern: /^\/inventory/, access: 'manager' },
   { method: '*', pattern: /^\/purchases/, access: 'manager' },
   { method: '*', pattern: /^\/suppliers/, access: 'manager' },

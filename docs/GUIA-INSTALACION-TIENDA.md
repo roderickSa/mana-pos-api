@@ -26,10 +26,15 @@ npm install
 | Variable | Valor en la tienda | Qué es |
 |---|---|---|
 | `MANA_DEVICES_MODE` | `real` | Activa impresora, cajón y balanza reales |
-| `MANA_PRINTER_INTERFACE` | `printer:NOMBRE_IMPRESORA` o `\\.\COM5` | Cómo se llega a la térmica (nombre de Windows o puerto) |
-| `MANA_PRINTER_PAPER_MM` | `80` (o `58`) | Ancho del papel |
+| `MANA_PRINTER_INTERFACE` | `printer:NOMBRE_IMPRESORA` o `\\.\COM5` | Fallback de la térmica (nombre de Windows o puerto) |
+| `MANA_PRINTER_PAPER_MM` | `80` (o `58`) | Ancho del papel por defecto |
 | `MANA_SCALE_SERIAL_PATH` | `COM3` | Puerto serial de la balanza (míralo en Administrador de dispositivos) |
 | `MANA_SCALE_BAUD_RATE` | `9600` | Velocidad (dato del manual de la balanza) |
+
+> **La impresora también se elige desde la pantalla**: en **Ajustes → Equipos**
+> se lista lo instalado en Windows y se elige impresora y ancho de papel — eso
+> manda sobre las variables y aplica desde la siguiente impresión, sin
+> reiniciar. Las variables quedan como respaldo si nadie configuró nada.
 
 Deja el resto por defecto: BD en `mana.sqlite`, backups en `backups\`, imágenes en `data\images\`.
 
@@ -56,11 +61,22 @@ Acceso directo en el escritorio (o en Inicio automático) con:
 
 ## 6. Primer uso
 
-1. Entra con el PIN **1234** (usuario inicial "Encargado").
-2. Ve a **Usuarios**: cámbiale el PIN y crea a las cajeras (perfil "Cajera").
-3. Ve a **Equipos**: imprime la página de prueba y abre el cajón para verificar el hardware.
-4. Ve a **Inventario → Importar Excel**: descarga la plantilla, llénala con tus productos y súbela.
-5. Abre la **Caja** con el fondo del día y a vender.
+1. Entra con el PIN **2580** (usuario inicial "Dueño").
+2. Ve a **Ajustes → Usuarios**: **CAMBIA ESE PIN YA** y crea al encargado y a
+   las cajeras con sus propios PIN.
+3. Ve a **Ajustes → Equipos**: elige la impresora instalada y el ancho de papel,
+   **Imprimir prueba** y **abrir cajón** para verificar el hardware. El estado
+   de la balanza sale ahí mismo.
+4. Ve a **Ajustes → Voucher**: nombre de la tienda y mensaje final, con vista
+   previa al ancho real del papel.
+5. Ve a **Ajustes → Categorías**: ordena las pestañas de Vender y ponles ícono
+   y color.
+6. Ve a **Inventario → Importar Excel**: descarga la plantilla, llénala con tus
+   productos y súbela (las categorías deben existir antes).
+7. Ve a **Ajustes → Respaldo** (dueño): configura la carpeta externa (USB o red).
+8. Abre la **Caja** con el fondo del día y a vender.
+
+El manual completo de operación está en `docs/MANUAL-DE-USO.md`.
 
 ## 7. Modo entrenamiento (opcional)
 
@@ -91,6 +107,7 @@ siguiente impresión.
 | Síntoma | Qué revisar |
 |---|---|
 | La pantalla dice "Sistema local sin responder" | El servicio ManaPOS está detenido → `nssm start ManaPOS` |
-| No imprime | Cable USB / prendida → prueba desde **Equipos → Página de prueba** |
-| La balanza no marca | Puerto COM correcto y cable → el estado sale en **Equipos** |
+| No imprime | Cable USB / prendida → prueba desde **Ajustes → Equipos → Imprimir prueba**; verifica la impresora elegida y el ancho |
+| Imprime pero con caracteres raros o nada por nombre de impresora | Algunos drivers necesitan el paquete opcional: `cd C:\mana\mana-pos-api && npm install printer` y reinicia el servicio |
+| La balanza no marca | Puerto COM correcto y cable → el estado sale en **Ajustes → Equipos** |
 | Se fue la luz a media venta | No pasa nada: la BD no se corrompe (WAL) y el ticket en curso sigue al volver |

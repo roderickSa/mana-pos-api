@@ -18,6 +18,7 @@ import {
   ShortCodeAlreadyInUse,
   SupplierNotFound,
 } from '#modules/catalog/use-cases/create-product/create-product.output.js';
+import { ListCategories } from '#modules/catalog/use-cases/manage-categories/manage-categories.js';
 import { RegisterStockEntry } from '#modules/inventory/use-cases/register-stock-entry/register-stock-entry.js';
 import { RegisterStockEntryInput } from '#modules/inventory/use-cases/register-stock-entry/register-stock-entry.input.js';
 import { CreateSupplier } from '#modules/suppliers/use-cases/create-supplier/create-supplier.js';
@@ -26,7 +27,6 @@ import { ListSuppliers } from '#modules/suppliers/use-cases/list-suppliers/list-
 import { exhaustive } from '#shared/domain/exhaustive.js';
 
 const IMPORT_USER = 'import-excel';
-const VALID_CATEGORIES = ['frutas-verduras', 'abarrotes', 'bebidas', 'limpieza', 'pan'] as const;
 
 const importRequestDto = z.object({
   fileBase64: z.string().min(1).max(15_000_000),
@@ -39,11 +39,9 @@ const rowDto = z.object({
     .trim()
     .toLowerCase()
     .pipe(z.enum(['unidad', 'peso'], { message: 'tipo debe ser "unidad" o "peso"' })),
-  categoria: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .pipe(z.enum(VALID_CATEGORIES, { message: `categoría inválida (usa: ${VALID_CATEGORIES.join(', ')})` })),
+  // Las categorías son dinámicas (se crean/borran en Ajustes): se validan
+  // contra la tabla real en el momento del import, no con una lista fija.
+  categoria: z.string().trim().toLowerCase().min(1, 'categoría vacía'),
   precio: z.coerce.number({ message: 'precio debe ser un número' }).positive('precio debe ser mayor a 0'),
   costo: z.coerce.number({ message: 'costo debe ser un número' }).nonnegative('costo no puede ser negativo'),
   codigo_barras: z.coerce.string().trim().optional(),
@@ -71,13 +69,14 @@ export class ImportProductsController {
     private readonly createSupplier: CreateSupplier,
     private readonly listSuppliers: ListSuppliers,
     private readonly searchProducts: SearchProducts,
+    private readonly listCategories: ListCategories,
   ) {}
 
   // Exportación completa del inventario: sirve como respaldo legible y como
   // base para actualizar en Excel y re-importar.
   async export(_request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const page = await this.searchProducts.execute(
-      new SearchProductsInput(null, null, null, false, false, false, true, false, 10000, 0),
+      new SearchProductsInput(null, null, null, false, false, false, true, 'default', false, 10000, 0),
     );
     const suppliers = await this.listSuppliers.execute();
     const supplierNames = new Map(suppliers.map((supplier) => [supplier.id, supplier.name]));
@@ -177,6 +176,8 @@ export class ImportProductsController {
     }
 
     const supplierIdsByName = await this.loadSupplierIndex();
+    const categories = await this.listCategories.execute(true);
+    const validCategories = new Set(categories.map((category) => category.slug));
     const rejected: RejectedRow[] = [];
     let createdCount = 0;
 
@@ -189,6 +190,15 @@ export class ImportProductsController {
         continue;
       }
       const row = parsed.data;
+
+      if (!validCategories.has(row.categoria)) {
+        rejected.push({
+          row: rowNumber,
+          name: row.nombre,
+          reason: `categoría inválida (usa: ${[...validCategories].join(', ')})`,
+        });
+        continue;
+      }
 
       const supplierId = await this.resolveSupplier(row.proveedor, supplierIdsByName);
       const supplierIds = supplierId === null ? [] : [supplierId];

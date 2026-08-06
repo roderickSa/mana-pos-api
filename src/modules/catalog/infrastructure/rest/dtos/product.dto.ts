@@ -85,7 +85,8 @@ export const searchProductsDto = z.object({
   query: z.string().optional(),
   category: z.string().optional(),
   supplier: z.string().optional(),
-  orderBy: z.enum(['sales', 'name']).optional(),
+  orderBy: z.enum(['sales', 'name', 'price', 'stock', 'margin']).optional(),
+  orderDir: z.enum(['asc', 'desc']).optional(),
   page: z.coerce.number().int().positive().optional(),
   perPage: z.coerce.number().int().positive().max(100).optional(),
   quickAccess: z

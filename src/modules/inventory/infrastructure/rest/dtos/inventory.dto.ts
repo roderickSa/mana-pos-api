@@ -30,7 +30,7 @@ export const setCountDto = z.object({
 export const searchMovementsDto = z.object({
   query: z.string().optional(),
   kind: z
-    .enum(['sale', 'sale_reversal', 'purchase', 'waste', 'expiry', 'theft', 'count'])
+    .enum(['sale', 'sale_reversal', 'purchase', 'waste', 'expiry', 'theft', 'count', 'refund'])
     .optional(),
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

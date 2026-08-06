@@ -41,6 +41,8 @@ const customerBodyDto = z.object({
 const listQueryDto = z.object({
   query: z.string().optional(),
   onlyDebtors: z.enum(['true', 'false']).optional(),
+  page: z.coerce.number().int().positive().optional(),
+  perPage: z.coerce.number().int().positive().max(100).optional(),
 });
 
 const abonoDto = z.object({
@@ -93,7 +95,22 @@ export class CreditController {
     const accounts = await this.listCustomerAccounts.execute(
       new ListCustomerAccountsInput(query.query ?? null, query.onlyDebtors === 'true'),
     );
-    await reply.status(200).send(accounts.map(toAccountResponse));
+    // Sin page: respuesta plana (la usan el picker de venta y flujos viejos).
+    if (query.page === undefined) {
+      await reply.status(200).send(accounts.map(toAccountResponse));
+      return;
+    }
+    const perPage = query.perPage ?? 25;
+    const start = (query.page - 1) * perPage;
+    await reply.status(200).send({
+      items: accounts.slice(start, start + perPage).map(toAccountResponse),
+      total: accounts.length,
+      page: query.page,
+      perPage,
+      // Totales sobre TODO el resultado, no solo la página visible.
+      totalDebtCents: accounts.reduce((sum, account) => sum + Math.max(0, account.balanceCents), 0),
+      totalInFavorCents: accounts.reduce((sum, account) => sum + Math.max(0, -account.balanceCents), 0),
+    });
   }
 
   async statement(request: FastifyRequest, reply: FastifyReply): Promise<void> {
