@@ -17,4 +17,7 @@ export interface CreditGateway {
   ): Promise<CreditChargeResult>;
   // Idempotente: al anular una venta fiada, revierte la deuda una sola vez.
   reverseCreditForTicket(ticketId: string, userId: string): Promise<void>;
+  // Devolución de una venta fiada: abona el monto a la deuda del cliente.
+  // Devuelve false si el ticket no tenía cargo al fiado.
+  refundToCredit(ticketId: string, amountCents: number, userId: string): Promise<boolean>;
 }

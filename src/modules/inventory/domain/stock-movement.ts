@@ -7,7 +7,8 @@ export type StockMovementKind =
   | 'waste'
   | 'expiry'
   | 'theft'
-  | 'count';
+  | 'count'
+  | 'refund';
 
 // quantity es un delta con signo: positivo suma stock, negativo lo descuenta.
 // Unidades para productos por unidad, gramos para productos por peso.

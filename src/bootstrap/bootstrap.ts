@@ -12,6 +12,10 @@ import { UuidIdGenerator } from '#shared/infrastructure/uuid-id-generator.js';
 import { SqliteProductRepository } from '#modules/catalog/infrastructure/repositories/sqlite-product-repository.js';
 import { CatalogController } from '#modules/catalog/infrastructure/rest/catalog-controller.js';
 import { registerCatalogRoutes } from '#modules/catalog/infrastructure/rest/catalog-routes.js';
+import { PricesController } from '#modules/catalog/infrastructure/rest/prices-controller.js';
+import { BulkUpdatePrices } from '#modules/catalog/use-cases/bulk-update-prices/bulk-update-prices.js';
+import { SuggestLowMarginPrices } from '#modules/catalog/use-cases/suggest-low-margin-prices/suggest-low-margin-prices.js';
+import { ApplyPriceList } from '#modules/catalog/use-cases/apply-price-list/apply-price-list.js';
 import { CreateProduct } from '#modules/catalog/use-cases/create-product/create-product.js';
 import { GetProductByBarcode } from '#modules/catalog/use-cases/get-product-by-barcode/get-product-by-barcode.js';
 import { SearchProducts } from '#modules/catalog/use-cases/search-products/search-products.js';
@@ -50,7 +54,9 @@ import { CategoriesController } from '#modules/catalog/infrastructure/rest/categ
 import { SqliteCategoryRepository } from '#modules/catalog/infrastructure/repositories/sqlite-category-repository.js';
 import {
   CreateCategory,
+  DeleteCategory,
   ListCategories,
+  ReorderCategories,
   UpdateCategory,
 } from '#modules/catalog/use-cases/manage-categories/manage-categories.js';
 import {
@@ -69,8 +75,10 @@ import { ExternalDirService } from '#modules/backups/use-cases/external-dir-serv
 import { SqliteSettingsRepository } from '#modules/settings/infrastructure/repositories/sqlite-settings-repository.js';
 import { registerSettingsRoutes } from '#modules/settings/infrastructure/rest/settings-routes.js';
 import { ReceiptConfigService } from '#modules/settings/use-cases/receipt-config-service.js';
+import { PrinterConfigService } from '#modules/settings/use-cases/printer-config-service.js';
 import path from 'node:path';
 import { ReverseSaleStock } from '#modules/inventory/use-cases/reverse-sale-stock/reverse-sale-stock.js';
+import { ReturnRefundStock } from '#modules/inventory/use-cases/return-refund-stock/return-refund-stock.js';
 import { DiscountStockForSale } from '#modules/inventory/use-cases/discount-stock-for-sale/discount-stock-for-sale.js';
 import { SqliteTicketRepository } from '#modules/sales/infrastructure/repositories/sqlite-ticket-repository.js';
 import { CatalogProductCatalog } from '#modules/sales/infrastructure/services/catalog-product-catalog.js';
@@ -108,6 +116,11 @@ import { RegisterAbono } from '#modules/credit/use-cases/register-abono/register
 import { ReverseCreditForTicket } from '#modules/credit/use-cases/reverse-credit-for-ticket/reverse-credit-for-ticket.js';
 import { UpdateCustomer } from '#modules/credit/use-cases/update-customer/update-customer.js';
 import { CreditModuleGateway } from '#modules/sales/infrastructure/services/credit-module-gateway.js';
+import { CashModuleRefundCash } from '#modules/sales/infrastructure/services/cash-module-refund-cash.js';
+import { SqliteRefundRepository } from '#modules/sales/infrastructure/repositories/sqlite-refund-repository.js';
+import { CreditModuleCustomerNames } from '#modules/sales/infrastructure/services/credit-module-customer-names.js';
+import { RefundSale } from '#modules/sales/use-cases/refund-sale/refund-sale.js';
+import { RefundCreditForTicket } from '#modules/credit/use-cases/refund-credit-for-ticket/refund-credit-for-ticket.js';
 import { CashModuleSessionLookup } from '#modules/sales/infrastructure/services/cash-module-session-lookup.js';
 import { SqliteUserRepository } from '#modules/users/infrastructure/repositories/sqlite-user-repository.js';
 import { ScryptPinHasher } from '#modules/users/infrastructure/services/scrypt-pin-hasher.js';
@@ -263,10 +276,12 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
   }
 
   const ticketRepository = new SqliteTicketRepository(db);
+  const refundRepository = new SqliteRefundRepository(db);
   const productCatalogForSales = new CatalogProductCatalog(productRepository);
   const stockDiscounter = new InventoryStockDiscounter(
     new DiscountStockForSale(inventoryRepository, idGenerator, timeManager),
     new ReverseSaleStock(inventoryRepository, idGenerator, timeManager),
+    new ReturnRefundStock(inventoryRepository, idGenerator, timeManager),
   );
   const realDevices = config.devicesMode === 'real';
   const customerRepository = new SqliteCustomerRepository(db);
@@ -278,7 +293,12 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
   const registerAbono = new RegisterAbono(customerRepository, creditLedger, idGenerator, timeManager);
   const chargeCredit = new ChargeCredit(customerRepository, creditLedger, idGenerator, timeManager);
   const reverseCreditForTicket = new ReverseCreditForTicket(creditLedger, idGenerator, timeManager);
-  const creditGateway = new CreditModuleGateway(chargeCredit, reverseCreditForTicket);
+  const refundCreditForTicket = new RefundCreditForTicket(creditLedger, idGenerator, timeManager);
+  const creditGateway = new CreditModuleGateway(
+    chargeCredit,
+    reverseCreditForTicket,
+    refundCreditForTicket,
+  );
   const creditController = new CreditController(
     createCustomer,
     updateCustomer,
@@ -288,16 +308,20 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
   );
 
   const receiptConfigService = new ReceiptConfigService(settingsRepository);
+  const printerConfigService = new PrinterConfigService(
+    settingsRepository,
+    config.printer.paperWidthMm,
+  );
   const receiptPrinter = realDevices
     ? new EscPosReceiptPrinter(
         config.printer.interface,
-        config.printer.paperWidthMm,
+        printerConfigService,
         receiptConfigService,
         server.log,
       )
     : new SimulatedReceiptPrinter(server.log);
   const cashDrawer = realDevices
-    ? new EscPosCashDrawer(config.printer.interface, server.log)
+    ? new EscPosCashDrawer(config.printer.interface, printerConfigService, server.log)
     : new SimulatedCashDrawer(server.log);
   const scaleReader = realDevices
     ? new SerialScaleReader(config.scale.serialPath, config.scale.baudRate, server.log)
@@ -376,12 +400,27 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     timeManager,
   );
   const voidTicket = new VoidTicket(ticketRepository, stockDiscounter, creditGateway, timeManager);
+  const refundSale = new RefundSale(
+    ticketRepository,
+    refundRepository,
+    stockDiscounter,
+    creditGateway,
+    new CashModuleRefundCash(registerCashMovement),
+    receiptPrinter,
+    idGenerator,
+    timeManager,
+  );
   const searchTickets = new SearchTickets(ticketRepository);
-  const reprintReceipt = new ReprintReceipt(ticketRepository, receiptPrinter);
-  const getTicketDetail = new GetTicketDetail(ticketRepository);
+  const reprintReceipt = new ReprintReceipt(ticketRepository, refundRepository, receiptPrinter);
+  const getTicketDetail = new GetTicketDetail(
+    ticketRepository,
+    refundRepository,
+    new CreditModuleCustomerNames(customerRepository),
+  );
   const salesController = new SalesController(
     checkout,
     voidTicket,
+    refundSale,
     searchTickets,
     reprintReceipt,
     getTicketDetail,
@@ -429,6 +468,8 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     new ListCategories(categoryRepository),
     new CreateCategory(categoryRepository, timeManager),
     new UpdateCategory(categoryRepository),
+    new ReorderCategories(categoryRepository),
+    new DeleteCategory(categoryRepository),
     categoryRepository,
   );
   const purchaseOrderRepository = new SqlitePurchaseOrderRepository(db);
@@ -449,11 +490,22 @@ export function bootstrap(env: NodeJS.ProcessEnv): App {
     ),
   );
 
-  registerCatalogRoutes(server, catalogController, importProductsController, categoriesController);
+  const pricesController = new PricesController(
+    new BulkUpdatePrices(productRepository, timeManager),
+    new SuggestLowMarginPrices(productRepository),
+    new ApplyPriceList(productRepository, timeManager),
+  );
+  registerCatalogRoutes(
+    server,
+    catalogController,
+    importProductsController,
+    categoriesController,
+    pricesController,
+  );
   registerInventoryRoutes(server, inventoryController);
   registerSupplierRoutes(server, createSupplier, listSuppliers, updateSupplier);
   registerSalesRoutes(server, salesController);
-  registerDevicesRoutes(server, scaleReader, receiptPrinter, cashDrawer, config.devicesMode);
+  registerDevicesRoutes(server, scaleReader, receiptPrinter, cashDrawer, printerConfigService, config.devicesMode);
   registerCreditRoutes(server, creditController);
   registerCashRoutes(server, cashController);
   registerUsersRoutes(server, usersController);

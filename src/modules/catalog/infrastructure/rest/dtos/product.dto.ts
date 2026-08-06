@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { dimeCents } from '#shared/infrastructure/rest/money.dto.js';
+
 import { UnitProduct, type Product } from '#modules/catalog/domain/product.js';
 
 // El empaque viene completo o no viene: caja de N unidades a un costo dado.
@@ -26,7 +28,7 @@ export const createProductDto = z
       name: z.string().min(1),
       category: z.string().min(1),
       supplierIds: z.array(z.string().min(1)).default([]),
-      priceCents: z.number().int().positive(),
+      priceCents: dimeCents(z.number().int().positive()),
       costCents: z.number().int().nonnegative(),
       ...packFields,
       stockMinimum: z.number().int().nonnegative().default(0),
@@ -40,7 +42,7 @@ export const createProductDto = z
       name: z.string().min(1),
       category: z.string().min(1),
       supplierIds: z.array(z.string().min(1)).default([]),
-      pricePerKgCents: z.number().int().positive(),
+      pricePerKgCents: dimeCents(z.number().int().positive()),
       costPerKgCents: z.number().int().nonnegative(),
       stockMinimumGrams: z.number().int().nonnegative().default(0),
       quickAccess: z.boolean().default(false),
@@ -56,7 +58,7 @@ export const updateProductDto = z
     name: z.string().min(1),
     category: z.string().min(1),
     supplierIds: z.array(z.string().min(1)).default([]),
-    priceCents: z.number().int().positive(),
+    priceCents: dimeCents(z.number().int().positive()),
     costCents: z.number().int().nonnegative(),
     ...packFields,
     stockMinimum: z.number().int().nonnegative(),

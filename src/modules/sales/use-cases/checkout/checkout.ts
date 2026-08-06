@@ -37,13 +37,17 @@ import {
   CashReceivedInsufficient,
   CheckoutCompleted,
   CreditDeclinedAtCheckout,
+  DiscountNeedsManager,
   EmptyTicket,
+  LineDiscountTooBig,
   NoCashSessionOpen,
   PaymentsDoNotMatchTotal,
   ProductNotSellable,
   TicketAlreadyCharged,
+  TicketDiscountTooBig,
   type CheckoutResult,
 } from '#modules/sales/use-cases/checkout/checkout.output.js';
+import { discountsNeedManagerApproval } from '#modules/sales/domain/discount-policy.js';
 import { CreditDeclined, type CreditGateway } from '#modules/sales/ports/credit-gateway.js';
 import type { CashSessionLookup } from '#modules/sales/ports/cash-session-lookup.js';
 
@@ -76,13 +80,40 @@ export class Checkout {
     }
 
     const lines = await this.buildLines(input);
-    if (lines instanceof ProductNotSellable) {
+    if (lines instanceof ProductNotSellable || lines instanceof LineDiscountTooBig) {
       return lines;
     }
 
+    const linesTotalCents = lines.reduce((sum, line) => sum + line.totalCents, 0);
+    if (input.ticketDiscountCents > linesTotalCents) {
+      return new TicketDiscountTooBig(input.ticketDiscountCents, linesTotalCents);
+    }
+
+    const authorizedBy = this.resolveDiscountAuthorization(input, lines);
+    if (authorizedBy instanceof DiscountNeedsManager) {
+      return authorizedBy;
+    }
+
+    // El cliente explícito manda; si no hay y se fía, la venta queda a nombre
+    // del cliente del fiado (es la misma persona).
+    const creditPaymentOrder = input.payments.find((order) => order instanceof CreditPaymentOrder);
+    const customerId =
+      input.customerId ??
+      (creditPaymentOrder instanceof CreditPaymentOrder ? creditPaymentOrder.customerId : null);
+
     const now = this.timeManager.now();
     const number = await this.ticketRepository.nextTicketNumber();
-    const openTicket = Ticket.open(input.ticketId, number, lines, input.userId, cashSessionId, now);
+    const openTicket = Ticket.open(
+      input.ticketId,
+      number,
+      lines,
+      input.ticketDiscountCents,
+      authorizedBy,
+      customerId,
+      input.userId,
+      cashSessionId,
+      now,
+    );
 
     const totalCents = openTicket.totalCents;
     const payments = input.payments.map((order) => toPayment(order));
@@ -131,14 +162,16 @@ export class Checkout {
       await this.cashDrawer.open();
     }
 
-    const printResult = await this.receiptPrinter.printSaleReceipt(chargedTicket, changeCents);
+    const printResult = await this.receiptPrinter.printSaleReceipt(chargedTicket, changeCents, []);
     const printerWarning: Nullable<string> =
       printResult instanceof PrinterUnavailable ? printResult.humanMessage : null;
 
     return new CheckoutCompleted(chargedTicket, changeCents, printerWarning);
   }
 
-  private async buildLines(input: CheckoutInput): Promise<TicketLine[] | ProductNotSellable> {
+  private async buildLines(
+    input: CheckoutInput,
+  ): Promise<TicketLine[] | ProductNotSellable | LineDiscountTooBig> {
     const lines: TicketLine[] = [];
     for (const order of input.lines) {
       const product = await this.productCatalog.findForSale(order.productId);
@@ -153,11 +186,10 @@ export class Checkout {
             product.name,
             order.quantity,
             product.priceCents,
+            order.discountCents,
           ),
         );
-        continue;
-      }
-      if (order instanceof WeightLineOrder && product.saleType === 'weight') {
+      } else if (order instanceof WeightLineOrder && product.saleType === 'weight') {
         lines.push(
           new WeightTicketLine(
             this.idGenerator.generate(),
@@ -166,14 +198,44 @@ export class Checkout {
             order.grams,
             product.priceCents,
             order.weightSource,
+            order.discountCents,
           ),
         );
-        continue;
+      } else {
+        // El tipo de línea no coincide con el tipo del producto: no se puede vender así.
+        return new ProductNotSellable(order.productId);
       }
-      // El tipo de línea no coincide con el tipo del producto: no se puede vender así.
-      return new ProductNotSellable(order.productId);
+
+      const line = lines[lines.length - 1];
+      if (line !== undefined && line.discountCents > line.grossCents) {
+        return new LineDiscountTooBig(line.productId, line.discountCents, line.grossCents);
+      }
     }
     return lines;
+  }
+
+  // Quién firma el descuento: el encargado verificado por PIN, o quien vende
+  // si ya es encargado/dueño. null cuando no hay descuento o la cajera está
+  // dentro de su margen.
+  private resolveDiscountAuthorization(
+    input: CheckoutInput,
+    lines: TicketLine[],
+  ): Nullable<string> | DiscountNeedsManager {
+    const hasDiscounts =
+      input.ticketDiscountCents > 0 || lines.some((line) => line.discountCents > 0);
+    if (!hasDiscounts) {
+      return null;
+    }
+    if (input.discountAuthorizedBy !== null) {
+      return input.discountAuthorizedBy;
+    }
+    if (input.sellerCanApproveDiscounts) {
+      return input.userId;
+    }
+    if (discountsNeedManagerApproval(lines, input.ticketDiscountCents)) {
+      return new DiscountNeedsManager();
+    }
+    return null;
   }
 }
 

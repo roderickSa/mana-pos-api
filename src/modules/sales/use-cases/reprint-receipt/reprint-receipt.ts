@@ -3,6 +3,7 @@ import {
   PrinterUnavailable,
   type ReceiptPrinter,
 } from '#modules/sales/ports/receipt-printer.js';
+import type { RefundRepository } from '#modules/sales/ports/refund-repository.js';
 import type { TicketRepository } from '#modules/sales/ports/ticket-repository.js';
 
 export class ReprintReceiptInput {
@@ -27,6 +28,7 @@ export type ReprintReceiptResult = ReceiptReprinted | TicketNotFoundForReprint |
 export class ReprintReceipt {
   constructor(
     private readonly ticketRepository: TicketRepository,
+    private readonly refundRepository: RefundRepository,
     private readonly receiptPrinter: ReceiptPrinter,
   ) {}
 
@@ -39,7 +41,9 @@ export class ReprintReceipt {
       return new ReprintNotAllowed(ticket.status.name);
     }
 
-    const result = await this.receiptPrinter.printSaleReceipt(ticket, null);
+    // La reimpresión cuenta la verdad completa: con sus devoluciones.
+    const refunds = await this.refundRepository.findByTicketId(ticket.id);
+    const result = await this.receiptPrinter.printSaleReceipt(ticket, null, refunds);
     return new ReceiptReprinted(result instanceof PrinterUnavailable ? result.humanMessage : null);
   }
 }

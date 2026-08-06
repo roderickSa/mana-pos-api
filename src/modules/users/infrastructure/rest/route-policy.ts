@@ -44,6 +44,8 @@ const RULES: Rule[] = [
   { method: '*', pattern: /^\/inventory/, access: 'manager' },
   { method: '*', pattern: /^\/purchases/, access: 'manager' },
   { method: '*', pattern: /^\/suppliers/, access: 'manager' },
+  // Precios masivos y sugerencias por margen: solo encargado (incluye GET).
+  { method: '*', pattern: /^\/catalog\/prices/, access: 'manager' },
   // Catálogo: Vender necesita leerlo; administrarlo es de encargado.
   { method: 'GET', pattern: /^\/catalog/, access: 'cashier' },
   { method: '*', pattern: /^\/catalog/, access: 'manager' },

@@ -20,6 +20,11 @@ export const categories = sqliteTable('categories', {
   slug: text('slug').primaryKey(),
   name: text('name').notNull(),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  // Define el orden de las pestañas de Vender y de los selects de categoría.
+  sortOrder: integer('sort_order').notNull().default(0),
+  // Llaves de un set fijo del front (ícono de trazo y token de color).
+  icon: text('icon'),
+  color: text('color'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
@@ -177,7 +182,7 @@ export const stockMovements = sqliteTable(
       .notNull()
       .references(() => products.id),
     type: text('type', {
-      enum: ['sale', 'sale_reversal', 'purchase', 'waste', 'expiry', 'theft', 'count'],
+      enum: ['sale', 'sale_reversal', 'purchase', 'waste', 'expiry', 'theft', 'count', 'refund'],
     }).notNull(),
     quantity: integer('quantity').notNull(),
     // Valor del movimiento en céntimos: ventas al precio vendido, resto al costo.
@@ -239,7 +244,7 @@ export const cashMovements = sqliteTable(
     cashSessionId: text('cash_session_id')
       .notNull()
       .references(() => cashSessions.id),
-    type: text('type', { enum: ['withdrawal', 'expense', 'deposit'] }).notNull(),
+    type: text('type', { enum: ['withdrawal', 'expense', 'deposit', 'refund'] }).notNull(),
     amountCents: integer('amount_cents').notNull(),
     concept: text('concept').notNull(),
     userId: text('user_id').notNull(),
@@ -256,8 +261,13 @@ export const tickets = sqliteTable(
     status: text('status', { enum: ['open', 'charged', 'voided'] }).notNull(),
     // Nullable hasta que exista el módulo cash (tarea 7): ahí se exige caja abierta.
     cashSessionId: text('cash_session_id').references(() => cashSessions.id),
+    // Cliente opcional en cualquier venta (no solo fiado): historial por cliente.
+    customerId: text('customer_id').references(() => customers.id),
     userId: text('user_id').notNull(),
     totalCents: integer('total_cents').notNull().default(0),
+    // Descuento al ticket completo; los descuentos por línea van en ticket_lines.
+    discountCents: integer('discount_cents').notNull().default(0),
+    discountAuthorizedBy: text('discount_authorized_by'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     chargedAt: integer('charged_at', { mode: 'timestamp_ms' }),
     voidedAt: integer('voided_at', { mode: 'timestamp_ms' }),
@@ -304,6 +314,43 @@ export const payments = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (table) => [index('payments_ticket_idx').on(table.ticketId)],
+);
+
+// Devoluciones internas contra una venta cobrada (sin nota de crédito SUNAT).
+export const ticketRefunds = sqliteTable(
+  'ticket_refunds',
+  {
+    id: text('id').primaryKey(),
+    ticketId: text('ticket_id')
+      .notNull()
+      .references(() => tickets.id),
+    reason: text('reason').notNull(),
+    registeredBy: text('registered_by').notNull(),
+    // true = el dinero volvió como abono al fiado, no en efectivo.
+    refundedToCredit: integer('refunded_to_credit', { mode: 'boolean' }).notNull().default(false),
+    totalCents: integer('total_cents').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [index('ticket_refunds_ticket_idx').on(table.ticketId)],
+);
+
+export const ticketRefundLines = sqliteTable(
+  'ticket_refund_lines',
+  {
+    id: text('id').primaryKey(),
+    refundId: text('refund_id')
+      .notNull()
+      .references(() => ticketRefunds.id),
+    ticketLineId: text('ticket_line_id').notNull(),
+    productId: text('product_id')
+      .notNull()
+      .references(() => products.id),
+    description: text('description').notNull(),
+    // Unidades para productos por unidad, gramos para pesables.
+    quantity: integer('quantity').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+  },
+  (table) => [index('ticket_refund_lines_refund_idx').on(table.refundId)],
 );
 
 export const customers = sqliteTable('customers', {

@@ -2,7 +2,7 @@ import { and, desc, eq, exists, gte, inArray, lte, sql, type SQL } from 'drizzle
 
 import type { Nullable } from '#shared/domain/nullable.js';
 import type { DatabaseClient } from '#shared/infrastructure/database/client.js';
-import { payments, ticketLines, tickets } from '#shared/infrastructure/database/schema.js';
+import { customers, payments, ticketLines, tickets } from '#shared/infrastructure/database/schema.js';
 import {
   CardPayment,
   CashPayment,
@@ -47,8 +47,11 @@ export class SqliteTicketRepository implements TicketRepository {
       number: ticket.number,
       status: ticket.status.name,
       cashSessionId: ticket.cashSessionId,
+      customerId: ticket.customerId,
       userId: ticket.userId,
       totalCents: ticket.totalCents,
+      discountCents: ticket.discountCents,
+      discountAuthorizedBy: ticket.discountAuthorizedBy,
       createdAt: ticket.createdAt,
       chargedAt: ticket.chargedAt,
       voidedAt: ticket.voidedAt,
@@ -114,8 +117,9 @@ export class SqliteTicketRepository implements TicketRepository {
     const where = and(...conditions);
 
     const rows = await this.db
-      .select()
+      .select({ ticket: tickets, customerName: customers.name })
       .from(tickets)
+      .leftJoin(customers, eq(tickets.customerId, customers.id))
       .where(where)
       .orderBy(desc(tickets.chargedAt))
       .limit(params.limit)
@@ -126,7 +130,7 @@ export class SqliteTicketRepository implements TicketRepository {
       const paymentRows = await this.db
         .select()
         .from(payments)
-        .where(inArray(payments.ticketId, rows.map((row) => row.id)));
+        .where(inArray(payments.ticketId, rows.map((row) => row.ticket.id)));
       for (const payment of paymentRows) {
         const list = methodsByTicket.get(payment.ticketId) ?? [];
         list.push(payment.method);
@@ -185,13 +189,14 @@ export class SqliteTicketRepository implements TicketRepository {
       rows.map(
         (row) =>
           new TicketListItem(
-            row.id,
-            row.number,
-            row.status === 'voided' ? 'voided' : 'charged',
-            row.totalCents,
-            row.chargedAt,
-            methodsByTicket.get(row.id) ?? [],
-            row.userId,
+            row.ticket.id,
+            row.ticket.number,
+            row.ticket.status === 'voided' ? 'voided' : 'charged',
+            row.ticket.totalCents,
+            row.ticket.chargedAt,
+            methodsByTicket.get(row.ticket.id) ?? [],
+            row.ticket.userId,
+            row.customerName,
           ),
       ),
       totalRows[0]?.value ?? 0,
@@ -212,6 +217,9 @@ export class SqliteTicketRepository implements TicketRepository {
       toStatus(row.status),
       lineRows.map((line) => this.toLine(line)),
       paymentRows.map((payment) => this.toPayment(payment)),
+      row.discountCents,
+      row.discountAuthorizedBy,
+      row.customerId,
       row.userId,
       row.cashSessionId,
       row.createdAt,
@@ -224,7 +232,14 @@ export class SqliteTicketRepository implements TicketRepository {
 
   private toLine(row: LineRow): TicketLine {
     if (row.saleType === 'unit') {
-      return new UnitTicketLine(row.id, row.productId, row.description, row.quantity, row.unitPriceCents);
+      return new UnitTicketLine(
+        row.id,
+        row.productId,
+        row.description,
+        row.quantity,
+        row.unitPriceCents,
+        row.discountCents,
+      );
     }
     return new WeightTicketLine(
       row.id,
@@ -233,6 +248,7 @@ export class SqliteTicketRepository implements TicketRepository {
       row.quantity,
       row.unitPriceCents,
       row.weightSource ?? 'manual',
+      row.discountCents,
     );
   }
 
@@ -254,7 +270,7 @@ export class SqliteTicketRepository implements TicketRepository {
       quantity: isUnit ? line.quantity : line.grams,
       weightSource: isUnit ? null : line.weightSource,
       unitPriceCents: isUnit ? line.unitPriceCents : line.pricePerKgCents,
-      discountCents: 0,
+      discountCents: line.discountCents,
       totalCents: line.totalCents,
     };
   }

@@ -9,11 +9,14 @@ import {
 import {
   CashReceivedInsufficient,
   CheckoutCompleted,
+  DiscountNeedsManager,
   EmptyTicket,
+  LineDiscountTooBig,
   NoCashSessionOpen,
   PaymentsDoNotMatchTotal,
   ProductNotSellable,
   TicketAlreadyCharged,
+  TicketDiscountTooBig,
 } from '#modules/sales/use-cases/checkout/checkout.output.js';
 import { ForSaleProduct } from '#modules/sales/ports/product-catalog.js';
 import { PrinterUnavailable } from '#modules/sales/ports/receipt-printer.js';
@@ -164,6 +167,129 @@ describe('Checkout', () => {
     );
 
     expect(result).toBeInstanceOf(EmptyTicket);
+  });
+
+  it('rounds ONLY the ticket total to 10 cents, never per line', async () => {
+    // 100 g × 4.50/kg = 45 céntimos exactos (la línea NO se redondea);
+    // 350 + 45 = 395 → el total sube a 400 con redondeo visible de +5.
+    const result = await useCase.execute(
+      new CheckoutInput(
+        TICKET_ID,
+        [new UnitLineOrder('gaseosa', 1), new WeightLineOrder('papaya', 100, 'scale')],
+        [new CashPaymentOrder(400, null)],
+        'cajera-rosa',
+      ),
+    );
+
+    expect(result).toBeInstanceOf(CheckoutCompleted);
+    if (!(result instanceof CheckoutCompleted)) return;
+    expect(result.ticket.lines[1]?.totalCents).toBe(45);
+    expect(result.ticket.subtotalCents).toBe(395);
+    expect(result.ticket.totalCents).toBe(400);
+    expect(result.ticket.roundingCents).toBe(5);
+  });
+
+  it('applies a small line discount without manager approval', async () => {
+    // 2 × 350 − 50 de descuento (7%, dentro del margen de la cajera) = 650
+    const result = await useCase.execute(
+      new CheckoutInput(
+        TICKET_ID,
+        [new UnitLineOrder('gaseosa', 2, 50)],
+        [new CashPaymentOrder(650, null)],
+        'cajera-rosa',
+      ),
+    );
+
+    expect(result).toBeInstanceOf(CheckoutCompleted);
+    if (!(result instanceof CheckoutCompleted)) return;
+    expect(result.ticket.totalCents).toBe(650);
+    expect(result.ticket.lineDiscountsCents).toBe(50);
+    expect(result.ticket.discountAuthorizedBy).toBeNull();
+  });
+
+  it('rejects a big line discount from the cashier without manager approval', async () => {
+    // 200 de 700 = 28%: supera el margen sin autorización.
+    const result = await useCase.execute(
+      new CheckoutInput(
+        TICKET_ID,
+        [new UnitLineOrder('gaseosa', 2, 200)],
+        [new CashPaymentOrder(500, null)],
+        'cajera-rosa',
+      ),
+    );
+
+    expect(result).toBeInstanceOf(DiscountNeedsManager);
+    expect(ticketRepository.all()).toHaveLength(0);
+  });
+
+  it('accepts a big discount when a manager authorized it by PIN', async () => {
+    const result = await useCase.execute(
+      new CheckoutInput(
+        TICKET_ID,
+        [new UnitLineOrder('gaseosa', 2, 200)],
+        [new CashPaymentOrder(500, null)],
+        'cajera-rosa',
+        0,
+        'Encargado',
+      ),
+    );
+
+    expect(result).toBeInstanceOf(CheckoutCompleted);
+    if (!(result instanceof CheckoutCompleted)) return;
+    expect(result.ticket.discountAuthorizedBy).toBe('Encargado');
+  });
+
+  it('requires manager approval for any whole-ticket discount', async () => {
+    const denied = await useCase.execute(
+      new CheckoutInput(TICKET_ID, ordersOf990(), [new CashPaymentOrder(890, null)], 'cajera-rosa', 100),
+    );
+    expect(denied).toBeInstanceOf(DiscountNeedsManager);
+
+    const approved = await useCase.execute(
+      new CheckoutInput(TICKET_ID, ordersOf990(), [new CashPaymentOrder(890, null)], 'cajera-rosa', 100, 'Encargado'),
+    );
+    expect(approved).toBeInstanceOf(CheckoutCompleted);
+    if (!(approved instanceof CheckoutCompleted)) return;
+    expect(approved.ticket.totalCents).toBe(890);
+    expect(approved.ticket.discountCents).toBe(100);
+  });
+
+  it('lets a manager seller apply their own discounts without extra PIN', async () => {
+    const result = await useCase.execute(
+      new CheckoutInput(
+        TICKET_ID,
+        ordersOf990(),
+        [new CashPaymentOrder(890, null)],
+        'Encargado',
+        100,
+        null,
+        true,
+      ),
+    );
+
+    expect(result).toBeInstanceOf(CheckoutCompleted);
+    if (!(result instanceof CheckoutCompleted)) return;
+    expect(result.ticket.discountAuthorizedBy).toBe('Encargado');
+  });
+
+  it('rejects discounts larger than what can be discounted', async () => {
+    const lineTooBig = await useCase.execute(
+      new CheckoutInput(
+        TICKET_ID,
+        [new UnitLineOrder('gaseosa', 1, 400)],
+        [new CashPaymentOrder(100, null)],
+        'cajera-rosa',
+        0,
+        'Encargado',
+      ),
+    );
+    expect(lineTooBig).toBeInstanceOf(LineDiscountTooBig);
+
+    const ticketTooBig = await useCase.execute(
+      new CheckoutInput(TICKET_ID, ordersOf990(), [new CashPaymentOrder(1, null)], 'cajera-rosa', 1500, 'Encargado'),
+    );
+    expect(ticketTooBig).toBeInstanceOf(TicketDiscountTooBig);
+    expect(ticketRepository.all()).toHaveLength(0);
   });
 
   it('completes the sale with a human warning when the printer is down', async () => {

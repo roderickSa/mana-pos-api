@@ -1,6 +1,7 @@
 import type { Nullable } from '#shared/domain/nullable.js';
 import type { Product } from '#modules/catalog/domain/product.js';
-import type { ProductRepository } from '#modules/catalog/ports/product-repository.js';
+import { UnitProduct } from '#modules/catalog/domain/product.js';
+import type { PriceUpdate, ProductRepository } from '#modules/catalog/ports/product-repository.js';
 import type { SearchProductsParams } from '#modules/catalog/ports/search-products-params.js';
 
 export class ProductRepositoryForTesting implements ProductRepository {
@@ -68,6 +69,38 @@ export class ProductRepositoryForTesting implements ProductRepository {
       }
       return true;
     });
+  }
+
+  async updatePrices(updates: PriceUpdate[], at: Date): Promise<void> {
+    for (const update of updates) {
+      const product = this.productsById.get(update.productId);
+      if (product === undefined) continue;
+      if (product instanceof UnitProduct) {
+        this.productsById.set(
+          product.id,
+          new UnitProduct(
+            product.id,
+            product.barcode,
+            product.shortCode,
+            product.name,
+            product.normalizedName,
+            product.category,
+            product.supplierIds,
+            product.imagePath,
+            update.priceCents,
+            product.costCents,
+            product.packSize,
+            product.packCostCents,
+            product.stockUnits,
+            product.stockMinimum,
+            product.active,
+            product.quickAccess,
+            product.createdAt,
+            at,
+          ),
+        );
+      }
+    }
   }
 
   all(): Product[] {

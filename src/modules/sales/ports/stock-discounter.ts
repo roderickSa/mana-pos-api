@@ -12,4 +12,11 @@ export interface StockDiscounter {
   discountForSale(ticketId: string, items: SaleStockItem[], userId: string): Promise<void>;
   // Idempotente: si la venta ya fue revertida, no vuelve a sumar stock.
   reverseSale(ticketId: string, userId: string): Promise<void>;
+  // Devolución parcial: reingresa lo devuelto con kardex ligado al ticket.
+  returnForRefund(
+    ticketId: string,
+    refundId: string,
+    items: SaleStockItem[],
+    userId: string,
+  ): Promise<void>;
 }

@@ -5,7 +5,7 @@ import type { DatabaseClient } from '#shared/infrastructure/database/client.js';
 import { productBarcodes, products, productSuppliers } from '#shared/infrastructure/database/schema.js';
 import { fuzzyMatchesName } from '#modules/catalog/domain/fuzzy-match.js';
 import { UnitProduct, WeightProduct, type Product } from '#modules/catalog/domain/product.js';
-import type { ProductRepository } from '#modules/catalog/ports/product-repository.js';
+import type { PriceUpdate, ProductRepository } from '#modules/catalog/ports/product-repository.js';
 import type { SearchProductsParams } from '#modules/catalog/ports/search-products-params.js';
 
 type ProductRow = typeof products.$inferSelect;
@@ -83,6 +83,17 @@ export class SqliteProductRepository implements ProductRepository {
       .from(products)
       .where(and(...this.searchConditions(params)));
     return rows[0]?.value ?? 0;
+  }
+
+  async updatePrices(updates: PriceUpdate[], at: Date): Promise<void> {
+    this.db.transaction((tx) => {
+      for (const update of updates) {
+        tx.update(products)
+          .set({ priceCents: update.priceCents, updatedAt: at })
+          .where(eq(products.id, update.productId))
+          .run();
+      }
+    });
   }
 
   private searchConditions(params: SearchProductsParams): SQL[] {

@@ -34,7 +34,7 @@ describe('CreateCategory', () => {
 
   it('rejects duplicated names by slug', async () => {
     const repository = new CategoryRepositoryForTesting();
-    repository.seed(new Category('golosinas', 'Golosinas', true, new Date()));
+    repository.seed(new Category('golosinas', 'Golosinas', true, 0, null, null, new Date()));
     const useCase = new CreateCategory(repository, new TimeManagerForTesting());
 
     const result = await useCase.execute(new CreateCategoryInput('GOLOSINAS'));
@@ -46,7 +46,7 @@ describe('CreateCategory', () => {
 describe('UpdateCategory', () => {
   it('renames keeping the slug and toggles active', async () => {
     const repository = new CategoryRepositoryForTesting();
-    repository.seed(new Category('pan', 'Pan', true, new Date()));
+    repository.seed(new Category('pan', 'Pan', true, 0, null, null, new Date()));
     const useCase = new UpdateCategory(repository);
 
     const renamed = await useCase.execute(new UpdateCategoryInput('pan', 'Panadería', null));
@@ -71,8 +71,8 @@ describe('UpdateCategory', () => {
 describe('ListCategories', () => {
   it('filters inactive categories unless asked', async () => {
     const repository = new CategoryRepositoryForTesting();
-    repository.seed(new Category('pan', 'Pan', true, new Date()));
-    repository.seed(new Category('golosinas', 'Golosinas', false, new Date()));
+    repository.seed(new Category('pan', 'Pan', true, 0, null, null, new Date()));
+    repository.seed(new Category('golosinas', 'Golosinas', false, 0, null, null, new Date()));
     const useCase = new ListCategories(repository);
 
     expect((await useCase.execute(false)).map((c) => c.slug)).toEqual(['pan']);

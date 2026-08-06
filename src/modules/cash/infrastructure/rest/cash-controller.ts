@@ -2,6 +2,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { CashSessionRepository } from '#modules/cash/ports/cash-session-repository.js';
 import { z } from 'zod';
 
+import { dimeCents } from '#shared/infrastructure/rest/money.dto.js';
+
 import { exhaustive } from '#shared/domain/exhaustive.js';
 import type {
   CashBreakdown,
@@ -42,19 +44,19 @@ import {
 
 const openDto = z.object({
   shift: z.enum(['morning', 'afternoon']),
-  openingAmountCents: z.number().int().nonnegative(),
+  openingAmountCents: dimeCents(z.number().int().nonnegative()),
   userId: z.string().min(1).default('encargado'),
 });
 
 const movementDto = z.object({
   kind: z.enum(['withdrawal', 'expense', 'deposit']),
-  amountCents: z.number().int().positive(),
+  amountCents: dimeCents(z.number().int().positive()),
   concept: z.string().min(1),
   userId: z.string().min(1).default('encargado'),
 });
 
 const closeDto = z.object({
-  countedCashCents: z.number().int().nonnegative(),
+  countedCashCents: dimeCents(z.number().int().nonnegative()),
   userId: z.string().min(1).default('encargado'),
   note: z.string().max(200).nullish(),
 });
@@ -83,6 +85,7 @@ function toBreakdownResponse(breakdown: CashBreakdown): Record<string, unknown> 
     withdrawalsCents: breakdown.withdrawalsCents,
     expensesCents: breakdown.expensesCents,
     depositsCents: breakdown.depositsCents,
+    refundsCents: breakdown.refundsCents,
     currentCashCents: breakdown.currentCashCents,
   };
 }

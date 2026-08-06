@@ -41,6 +41,26 @@ export class CreditDeclinedAtCheckout {
   constructor(readonly humanMessage: string) {}
 }
 
+// El descuento de una línea no puede superar el bruto de esa línea.
+export class LineDiscountTooBig {
+  constructor(
+    readonly productId: string,
+    readonly discountCents: number,
+    readonly maxCents: number,
+  ) {}
+}
+
+// El descuento del ticket no puede superar la suma de las líneas ya rebajadas.
+export class TicketDiscountTooBig {
+  constructor(
+    readonly discountCents: number,
+    readonly maxCents: number,
+  ) {}
+}
+
+// Descuento fuera del margen de la cajera y sin autorización del encargado.
+export class DiscountNeedsManager {}
+
 export type CheckoutResult =
   | CheckoutCompleted
   | TicketAlreadyCharged
@@ -49,4 +69,7 @@ export type CheckoutResult =
   | PaymentsDoNotMatchTotal
   | CashReceivedInsufficient
   | CreditDeclinedAtCheckout
+  | LineDiscountTooBig
+  | TicketDiscountTooBig
+  | DiscountNeedsManager
   | NoCashSessionOpen;

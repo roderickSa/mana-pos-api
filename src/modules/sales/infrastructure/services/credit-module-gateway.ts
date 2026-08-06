@@ -10,6 +10,11 @@ import {
   ReverseCreditForTicket,
   ReverseCreditForTicketInput,
 } from '#modules/credit/use-cases/reverse-credit-for-ticket/reverse-credit-for-ticket.js';
+import {
+  CreditRefunded,
+  RefundCreditForTicket,
+  RefundCreditForTicketInput,
+} from '#modules/credit/use-cases/refund-credit-for-ticket/refund-credit-for-ticket.js';
 import { exhaustive } from '#shared/domain/exhaustive.js';
 import {
   CreditAccepted,
@@ -27,6 +32,7 @@ export class CreditModuleGateway implements CreditGateway {
   constructor(
     private readonly chargeCreditUseCase: ChargeCredit,
     private readonly reverseCreditUseCase: ReverseCreditForTicket,
+    private readonly refundCreditUseCase: RefundCreditForTicket,
   ) {}
 
   async chargeCredit(
@@ -54,5 +60,12 @@ export class CreditModuleGateway implements CreditGateway {
 
   async reverseCreditForTicket(ticketId: string, userId: string): Promise<void> {
     await this.reverseCreditUseCase.execute(new ReverseCreditForTicketInput(ticketId, userId));
+  }
+
+  async refundToCredit(ticketId: string, amountCents: number, userId: string): Promise<boolean> {
+    const result = await this.refundCreditUseCase.execute(
+      new RefundCreditForTicketInput(ticketId, amountCents, userId),
+    );
+    return result instanceof CreditRefunded;
   }
 }

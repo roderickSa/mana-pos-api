@@ -7,10 +7,15 @@ export class UnitTicketLine {
     readonly description: string,
     readonly quantity: number,
     readonly unitPriceCents: number,
+    readonly discountCents: number,
   ) {}
 
-  get totalCents(): number {
+  get grossCents(): number {
     return this.quantity * this.unitPriceCents;
+  }
+
+  get totalCents(): number {
+    return this.grossCents - this.discountCents;
   }
 }
 
@@ -22,10 +27,17 @@ export class WeightTicketLine {
     readonly grams: number,
     readonly pricePerKgCents: number,
     readonly weightSource: WeightSource,
+    readonly discountCents: number,
   ) {}
 
-  get totalCents(): number {
+  // La línea se calcula EXACTA al céntimo; el redondeo a 10 céntimos se aplica
+  // una sola vez sobre el total del ticket (redondear por línea pierde plata).
+  get grossCents(): number {
     return Math.round((this.grams / 1000) * this.pricePerKgCents);
+  }
+
+  get totalCents(): number {
+    return this.grossCents - this.discountCents;
   }
 }
 

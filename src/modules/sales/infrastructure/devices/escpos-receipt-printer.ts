@@ -3,6 +3,7 @@ import type { FastifyBaseLogger } from 'fastify';
 
 import type { Nullable } from '#shared/domain/nullable.js';
 import { CashPayment, CreditPayment, YapePayment } from '#modules/sales/domain/payment.js';
+import type { Refund } from '#modules/sales/domain/refund.js';
 import type { Ticket } from '#modules/sales/domain/ticket.js';
 import { UnitTicketLine } from '#modules/sales/domain/ticket-line.js';
 import {
@@ -13,6 +14,7 @@ import {
   type ReceiptPrinter,
 } from '#modules/sales/ports/receipt-printer.js';
 import type { ReceiptConfigService } from '#modules/settings/use-cases/receipt-config-service.js';
+import type { PrinterConfigService } from '#modules/settings/use-cases/printer-config-service.js';
 import type { CloseSummary, CloseSummaryPrinter } from '#modules/cash/ports/close-summary-printer.js';
 
 function soles(cents: number): string {
@@ -28,25 +30,35 @@ const METHOD_PRINT_LABELS: Record<string, string> = {
 
 export class EscPosReceiptPrinter implements ReceiptPrinter, CloseSummaryPrinter {
   constructor(
-    private readonly interfacePath: string,
-    private readonly paperWidthMm: 58 | 80,
+    // Fallback cuando no se eligió impresora en Ajustes → Equipos.
+    private readonly envInterfacePath: string,
+    private readonly printerConfig: PrinterConfigService,
     private readonly receiptConfig: ReceiptConfigService,
     private readonly logger: FastifyBaseLogger,
   ) {}
 
-  private buildPrinter(): ThermalPrinter {
+  // La impresora y el ancho se eligen en Ajustes → Equipos y aplican al
+  // siguiente voucher, sin reiniciar el sistema.
+  private async buildPrinter(): Promise<ThermalPrinter> {
+    const config = await this.printerConfig.get();
+    const interfacePath =
+      config.printerName === null ? this.envInterfacePath : `printer:${config.printerName}`;
     return new ThermalPrinter({
       type: PrinterTypes.EPSON,
-      interface: this.interfacePath,
+      interface: interfacePath,
       characterSet: CharacterSet.PC858_EURO,
-      width: this.paperWidthMm === 80 ? 48 : 32,
+      width: config.paperWidthMm === 80 ? 48 : 32,
       removeSpecialCharacters: false,
     });
   }
 
-  async printSaleReceipt(ticket: Ticket, changeCents: Nullable<number>): Promise<PrintReceiptResult> {
+  async printSaleReceipt(
+    ticket: Ticket,
+    changeCents: Nullable<number>,
+    refunds: Refund[],
+  ): Promise<PrintReceiptResult> {
     try {
-      const printer = this.buildPrinter();
+      const printer = await this.buildPrinter();
       const connected = await printer.isPrinterConnected();
       if (!connected) {
         return new PrinterUnavailable(
@@ -85,10 +97,26 @@ export class EscPosReceiptPrinter implements ReceiptPrinter, CloseSummaryPrinter
           line instanceof UnitTicketLine
             ? `  ${line.quantity} x ${soles(line.unitPriceCents)}`
             : `  ${(line.grams / 1000).toFixed(3)} kg x ${soles(line.pricePerKgCents)}/kg`;
-        printer.leftRight(detail, soles(line.totalCents));
+        if (line.discountCents > 0) {
+          printer.leftRight(detail, soles(line.grossCents));
+          printer.leftRight('  Descuento', `-${soles(line.discountCents)}`);
+        } else {
+          printer.leftRight(detail, soles(line.totalCents));
+        }
       }
 
       printer.drawLine();
+      if (ticket.discountCents > 0) {
+        printer.leftRight('Subtotal', soles(ticket.linesTotalCents));
+        printer.leftRight('Descuento', `-${soles(ticket.discountCents)}`);
+      }
+      // El redondeo del total a 10 céntimos se muestra siempre que exista.
+      if (ticket.roundingCents !== 0) {
+        printer.leftRight(
+          'Redondeo',
+          `${ticket.roundingCents > 0 ? '+' : '-'}${soles(Math.abs(ticket.roundingCents))}`,
+        );
+      }
       printer.bold(true);
       printer.setTextDoubleHeight();
       printer.leftRight('TOTAL', soles(ticket.totalCents));
@@ -110,6 +138,28 @@ export class EscPosReceiptPrinter implements ReceiptPrinter, CloseSummaryPrinter
         printer.leftRight('Vuelto', soles(changeCents));
       }
 
+      // Reimpresión de una venta con devoluciones: el papel cuenta la verdad.
+      if (refunds.length > 0) {
+        const refundedTotal = refunds.reduce((sum, refund) => sum + refund.totalCents, 0);
+        printer.drawLine();
+        printer.println('DEVOLUCIONES');
+        for (const refund of refunds) {
+          for (const line of refund.lines) {
+            printer.leftRight(
+              `  ${line.description} ${refundQuantityLabel(ticket, line.ticketLineId, line.quantity)}`,
+              '',
+            );
+          }
+          printer.leftRight(
+            `  ${refund.createdAt.toLocaleDateString('es-PE')} ${refund.refundedToCredit ? '(al fiado)' : '(efectivo)'}`,
+            `-${soles(refund.totalCents)}`,
+          );
+        }
+        printer.bold(true);
+        printer.leftRight('QUEDA COBRADO', soles(ticket.totalCents - refundedTotal));
+        printer.bold(false);
+      }
+
       printer.newLine();
       printer.alignCenter();
       printer.println(config.footerMessage);
@@ -129,10 +179,66 @@ export class EscPosReceiptPrinter implements ReceiptPrinter, CloseSummaryPrinter
     }
   }
 
+  // Constancia interna de devolución: se entrega al cliente con su plata.
+  async printRefundReceipt(ticket: Ticket, refund: Refund): Promise<PrintReceiptResult> {
+    try {
+      const printer = await this.buildPrinter();
+      const connected = await printer.isPrinterConnected();
+      if (!connected) {
+        return new PrinterUnavailable(
+          'La impresora no responde. Revisa que esté prendida y con el cable USB conectado.',
+        );
+      }
+      const config = await this.receiptConfig.get();
+      printer.alignCenter();
+      printer.bold(true);
+      printer.println(config.storeName);
+      printer.println('CONSTANCIA DE DEVOLUCION');
+      printer.bold(false);
+      printer.alignLeft();
+      printer.println(
+        `Venta #${ticket.number} · ${refund.createdAt.toLocaleString('es-PE', {
+          day: '2-digit',
+          month: '2-digit',
+          year: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })}`,
+      );
+      printer.println(`Motivo: ${refund.reason}`);
+      printer.println(`Registro: ${refund.registeredBy}`);
+      printer.drawLine();
+      for (const line of refund.lines) {
+        printer.leftRight(
+          `${line.description} ${refundQuantityLabel(ticket, line.ticketLineId, line.quantity)}`,
+          soles(line.amountCents),
+        );
+      }
+      printer.drawLine();
+      printer.bold(true);
+      printer.leftRight('DEVUELTO', soles(refund.totalCents));
+      printer.bold(false);
+      printer.println(refund.refundedToCredit ? 'Abonado a la cuenta de fiado' : 'Pagado en efectivo');
+      printer.newLine();
+      printer.alignCenter();
+      printer.println('Documento interno de control');
+      printer.cut();
+      await printer.execute();
+      return new ReceiptPrinted();
+    } catch (error) {
+      this.logger.warn({
+        event: 'printer_failed',
+        msg: 'Fallo al imprimir la constancia de devolución',
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
+      return new PrinterUnavailable('No se pudo imprimir la constancia. Revisa la impresora.');
+    }
+  }
+
   // Reporte Z: resumen del turno en papel al cerrar la caja.
   async printCloseSummary(summary: CloseSummary): Promise<Nullable<string>> {
     try {
-      const printer = this.buildPrinter();
+      const printer = await this.buildPrinter();
       const connected = await printer.isPrinterConnected();
       if (!connected) {
         return 'La impresora no responde. Revisa que esté prendida y con el cable USB conectado.';
@@ -162,6 +268,9 @@ export class EscPosReceiptPrinter implements ReceiptPrinter, CloseSummaryPrinter
       }
       printer.leftRight('Retiros', `-${soles(breakdown.withdrawalsCents)}`);
       printer.leftRight('Gastos', `-${soles(breakdown.expensesCents)}`);
+      if (breakdown.refundsCents > 0) {
+        printer.leftRight('Devoluciones', `-${soles(breakdown.refundsCents)}`);
+      }
       printer.drawLine();
       printer.leftRight('Esperado en cajon', soles(session.expectedCashCents ?? 0));
       printer.leftRight('Contado', soles(session.countedCashCents ?? 0));
@@ -194,7 +303,7 @@ export class EscPosReceiptPrinter implements ReceiptPrinter, CloseSummaryPrinter
 
   async printTestPage(): Promise<PrintReceiptResult> {
     try {
-      const printer = this.buildPrinter();
+      const printer = await this.buildPrinter();
       const connected = await printer.isPrinterConnected();
       if (!connected) {
         return new PrinterUnavailable(
@@ -215,6 +324,13 @@ export class EscPosReceiptPrinter implements ReceiptPrinter, CloseSummaryPrinter
   }
 }
 
+// Cantidad devuelta en humano: unidades como ×N, pesables en kg.
+function refundQuantityLabel(ticket: Ticket, ticketLineId: string, quantity: number): string {
+  const line = ticket.lines.find((item) => item.id === ticketLineId);
+  const isWeight = line !== undefined && !(line instanceof UnitTicketLine);
+  return isWeight ? `${(quantity / 1000).toFixed(3)} kg` : `x${quantity}`;
+}
+
 function formatDateTime(value: Date): string {
   return value.toLocaleString('es-PE', {
     day: '2-digit',
@@ -228,15 +344,18 @@ function formatDateTime(value: Date): string {
 
 export class EscPosCashDrawer implements CashDrawer {
   constructor(
-    private readonly interfacePath: string,
+    private readonly envInterfacePath: string,
+    private readonly printerConfig: PrinterConfigService,
     private readonly logger: FastifyBaseLogger,
   ) {}
 
   async open(): Promise<void> {
     try {
+      const config = await this.printerConfig.get();
       const printer = new ThermalPrinter({
         type: PrinterTypes.EPSON,
-        interface: this.interfacePath,
+        interface:
+          config.printerName === null ? this.envInterfacePath : `printer:${config.printerName}`,
       });
       printer.openCashDrawer();
       await printer.execute();

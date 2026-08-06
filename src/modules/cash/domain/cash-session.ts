@@ -77,11 +77,13 @@ export class CashSession {
   }
 }
 
+export type CashMovementKind = 'withdrawal' | 'expense' | 'deposit' | 'refund';
+
 export class CashMovement {
   constructor(
     readonly id: string,
     readonly cashSessionId: string,
-    readonly kind: 'withdrawal' | 'expense' | 'deposit',
+    readonly kind: CashMovementKind,
     readonly amountCents: number,
     readonly concept: string,
     readonly userId: string,
@@ -99,6 +101,8 @@ export class CashBreakdown {
     readonly expensesCents: number,
     // Refuerzos de fondo a media jornada (sencillo que entra, no venta).
     readonly depositsCents: number,
+    // Devoluciones pagadas en efectivo desde el cajón.
+    readonly refundsCents: number,
   ) {}
 
   get currentCashCents(): number {
@@ -108,7 +112,8 @@ export class CashBreakdown {
       this.cashAbonosCents +
       this.depositsCents -
       this.withdrawalsCents -
-      this.expensesCents
+      this.expensesCents -
+      this.refundsCents
     );
   }
 }

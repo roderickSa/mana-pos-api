@@ -17,11 +17,14 @@ import {
   CashReceivedInsufficient,
   CheckoutCompleted,
   CreditDeclinedAtCheckout,
+  DiscountNeedsManager,
   EmptyTicket,
+  LineDiscountTooBig,
   NoCashSessionOpen,
   PaymentsDoNotMatchTotal,
   ProductNotSellable,
   TicketAlreadyCharged,
+  TicketDiscountTooBig,
 } from '#modules/sales/use-cases/checkout/checkout.output.js';
 import { VoidTicket } from '#modules/sales/use-cases/void-ticket/void-ticket.js';
 import { VoidTicketInput } from '#modules/sales/use-cases/void-ticket/void-ticket.input.js';
@@ -33,10 +36,26 @@ import {
 } from '#modules/sales/use-cases/void-ticket/void-ticket.output.js';
 import {
   checkoutDto,
+  refundTicketDto,
   salesSearchDto,
+  toRefundResponse,
   toTicketResponse,
   voidTicketDto,
 } from '#modules/sales/infrastructure/rest/dtos/sales.dto.js';
+import { RefundSale } from '#modules/sales/use-cases/refund-sale/refund-sale.js';
+import {
+  RefundLineOrder,
+  RefundSaleInput,
+} from '#modules/sales/use-cases/refund-sale/refund-sale.input.js';
+import {
+  NothingToRefund,
+  RefundCashUnavailable,
+  RefundExceedsSold,
+  RefundLineUnknown,
+  RefundNotAllowed,
+  SaleRefunded,
+  TicketNotFoundForRefund,
+} from '#modules/sales/use-cases/refund-sale/refund-sale.output.js';
 import { SearchTickets } from '#modules/sales/use-cases/search-tickets/search-tickets.js';
 import {
   ReceiptReprinted,
@@ -66,6 +85,7 @@ export class SalesController {
   constructor(
     private readonly checkout: Checkout,
     private readonly voidTicket: VoidTicket,
+    private readonly refundSale: RefundSale,
     private readonly searchTickets: SearchTickets,
     private readonly reprintReceipt: ReprintReceipt,
     private readonly getTicketDetail: GetTicketDetail,
@@ -79,6 +99,9 @@ export class SalesController {
       await reply.status(200).send({
         ...toTicketResponse(result.ticket, null),
         igv: igvBreakdownOf(result.ticket.totalCents, rate),
+        refunds: result.refunds.map((refund) => toRefundResponse(refund)),
+        refundedCents: result.refunds.reduce((sum, refund) => sum + refund.totalCents, 0),
+        customerName: result.customerName,
       });
       return;
     }
@@ -137,6 +160,7 @@ export class SalesController {
         chargedAt: item.chargedAt?.toISOString() ?? null,
         methods: item.methods,
         userId: item.userId,
+        customerName: item.customerName,
       })),
       total: result.total,
       page,
@@ -165,7 +189,7 @@ export class SalesController {
       ),
     );
 
-    const header = 'numero,fecha,hora,estado,metodos,total_soles,usuario';
+    const header = 'numero,fecha,hora,estado,metodos,total_soles,usuario,cliente';
     const rows = result.items.map((item) => {
       const chargedAt = item.chargedAt;
       const fecha = chargedAt === null ? '' : chargedAt.toLocaleDateString('es-PE');
@@ -175,7 +199,7 @@ export class SalesController {
           : chargedAt.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
       const metodos = item.methods.map((method) => METHOD_LABELS[method] ?? method).join('+');
       const estado = item.status === 'charged' ? 'cobrada' : 'anulada';
-      return `${item.number},${fecha},${hora},${estado},${metodos},${(item.totalCents / 100).toFixed(2)},${item.userId}`;
+      return `${item.number},${fecha},${hora},${estado},${metodos},${(item.totalCents / 100).toFixed(2)},${item.userId},${item.customerName ?? ''}`;
     });
     const csv = `﻿${header}\n${rows.join('\n')}\n`;
 
@@ -191,8 +215,8 @@ export class SalesController {
 
     const lines: LineOrder[] = body.lines.map((line) =>
       line.saleType === 'unit'
-        ? new UnitLineOrder(line.productId, line.quantity)
-        : new WeightLineOrder(line.productId, line.grams, line.weightSource),
+        ? new UnitLineOrder(line.productId, line.quantity, line.discountCents)
+        : new WeightLineOrder(line.productId, line.grams, line.weightSource, line.discountCents),
     );
     const paymentOrders: PaymentOrder[] = body.payments.map((payment) => {
       if (payment.method === 'cash') {
@@ -207,8 +231,19 @@ export class SalesController {
       return new CardPaymentOrder(payment.amountCents);
     });
 
+    // Encargado o dueño vendiendo: sus propios descuentos no piden PIN aparte.
+    const sellerCanApproveDiscounts = request.authUser !== null && request.authUser.isManager();
     const result = await this.checkout.execute(
-      new CheckoutInput(body.ticketId, lines, paymentOrders, body.userId),
+      new CheckoutInput(
+        body.ticketId,
+        lines,
+        paymentOrders,
+        body.userId,
+        body.ticketDiscountCents,
+        body.discountAuthorizedBy ?? null,
+        sellerCanApproveDiscounts,
+        body.customerId ?? null,
+      ),
     );
 
     if (result instanceof CheckoutCompleted) {
@@ -261,6 +296,79 @@ export class SalesController {
         receivedCents: result.receivedCents,
         message: 'El efectivo recibido no alcanza para el monto a pagar.',
       });
+      return;
+    }
+    if (result instanceof LineDiscountTooBig || result instanceof TicketDiscountTooBig) {
+      await reply.status(422).send({
+        code: 'INVALID_DISCOUNT',
+        message: 'El descuento supera lo que se puede rebajar. Revisa los montos.',
+      });
+      return;
+    }
+    if (result instanceof DiscountNeedsManager) {
+      await reply.status(409).send({
+        code: 'DISCOUNT_NEEDS_MANAGER',
+        message: 'Ese descuento necesita la autorización del encargado.',
+      });
+      return;
+    }
+    exhaustive(result);
+  }
+
+  async doRefund(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const ticketId = ticketIdParam(request);
+    const body = refundTicketDto.parse(request.body ?? {});
+    const result = await this.refundSale.execute(
+      new RefundSaleInput(
+        ticketId,
+        body.lines.map((line) => new RefundLineOrder(line.ticketLineId, line.quantity)),
+        body.reason,
+        body.registeredBy,
+      ),
+    );
+
+    if (result instanceof SaleRefunded) {
+      await reply
+        .status(201)
+        .send({ ...toRefundResponse(result.refund), printerWarning: result.printerWarning });
+      return;
+    }
+    if (result instanceof TicketNotFoundForRefund) {
+      await reply.status(404).send({ code: 'TICKET_NOT_FOUND', ticketId: result.ticketId });
+      return;
+    }
+    if (result instanceof RefundNotAllowed) {
+      await reply.status(409).send({
+        code: 'REFUND_NOT_ALLOWED',
+        currentStatus: result.currentStatus,
+        message: 'Solo se puede devolver sobre ventas cobradas.',
+      });
+      return;
+    }
+    if (result instanceof NothingToRefund) {
+      await reply.status(400).send({
+        code: 'NOTHING_TO_REFUND',
+        message: 'Elige al menos un producto a devolver.',
+      });
+      return;
+    }
+    if (result instanceof RefundLineUnknown) {
+      await reply.status(422).send({
+        code: 'REFUND_LINE_UNKNOWN',
+        message: 'Una línea de la devolución no pertenece a esta venta.',
+      });
+      return;
+    }
+    if (result instanceof RefundExceedsSold) {
+      await reply.status(409).send({
+        code: 'REFUND_EXCEEDS_SOLD',
+        remainingQuantity: result.remainingQuantity,
+        message: 'Se pidió devolver más de lo que queda por devolver.',
+      });
+      return;
+    }
+    if (result instanceof RefundCashUnavailable) {
+      await reply.status(409).send({ code: 'REFUND_CASH_UNAVAILABLE', message: result.humanMessage });
       return;
     }
     exhaustive(result);

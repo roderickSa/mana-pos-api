@@ -5,6 +5,7 @@ import type { SalesController } from '#modules/sales/infrastructure/rest/sales-c
 export function registerSalesRoutes(server: FastifyInstance, controller: SalesController): void {
   server.post('/sales/checkout', (request, reply) => controller.doCheckout(request, reply));
   server.post('/sales/tickets/:id/void', (request, reply) => controller.doVoid(request, reply));
+  server.post('/sales/tickets/:id/refunds', (request, reply) => controller.doRefund(request, reply));
   server.post('/sales/tickets/:id/reprint', (request, reply) => controller.doReprint(request, reply));
   server.get('/sales/tickets', (request, reply) => controller.list(request, reply));
   server.get('/sales/tickets/:id', (request, reply) => controller.detail(request, reply));

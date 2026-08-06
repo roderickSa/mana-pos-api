@@ -9,6 +9,7 @@ import {
 import { chargedTicketMother } from '../mothers/ticket.mother.js';
 import {
   ReceiptPrinterForTesting,
+  RefundRepositoryForTesting,
   TicketRepositoryForTesting,
 } from '../test-doubles/sales-test-doubles.js';
 
@@ -20,7 +21,7 @@ describe('ReprintReceipt', () => {
   beforeEach(() => {
     repository = new TicketRepositoryForTesting();
     printer = new ReceiptPrinterForTesting();
-    useCase = new ReprintReceipt(repository, printer);
+    useCase = new ReprintReceipt(repository, new RefundRepositoryForTesting(), printer);
   });
 
   it('reprints a charged ticket', async () => {

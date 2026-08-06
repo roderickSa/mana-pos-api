@@ -1,6 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 
 import type { Nullable } from '#shared/domain/nullable.js';
+import type { Refund } from '#modules/sales/domain/refund.js';
 import type { Ticket } from '#modules/sales/domain/ticket.js';
 import {
   ReceiptPrinted,
@@ -29,11 +30,24 @@ export class SimulatedReceiptPrinter implements ReceiptPrinter, CloseSummaryPrin
     return null;
   }
 
-  async printSaleReceipt(ticket: Ticket, changeCents: Nullable<number>): Promise<PrintReceiptResult> {
+  async printSaleReceipt(
+    ticket: Ticket,
+    changeCents: Nullable<number>,
+    refunds: Refund[],
+  ): Promise<PrintReceiptResult> {
     this.logger.info({
       event: 'simulated_receipt_printed',
       msg: `Voucher simulado del ticket #${ticket.number}`,
-      data: { ticketId: ticket.id, totalCents: ticket.totalCents, changeCents },
+      data: { ticketId: ticket.id, totalCents: ticket.totalCents, changeCents, refunds: refunds.length },
+    });
+    return new ReceiptPrinted();
+  }
+
+  async printRefundReceipt(ticket: Ticket, refund: Refund): Promise<PrintReceiptResult> {
+    this.logger.info({
+      event: 'simulated_refund_receipt_printed',
+      msg: `Constancia de devolución simulada de la venta #${ticket.number}`,
+      data: { ticketId: ticket.id, refundId: refund.id, totalCents: refund.totalCents },
     });
     return new ReceiptPrinted();
   }

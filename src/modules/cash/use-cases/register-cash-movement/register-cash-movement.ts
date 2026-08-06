@@ -1,12 +1,12 @@
 import type { IdGenerator } from '#shared/ports/id-generator.js';
 import type { TimeManager } from '#shared/ports/time-manager.js';
-import { CashMovement } from '#modules/cash/domain/cash-session.js';
+import { CashMovement, type CashMovementKind } from '#modules/cash/domain/cash-session.js';
 import type { CashSessionRepository } from '#modules/cash/ports/cash-session-repository.js';
 import { GetCashStatus } from '#modules/cash/use-cases/get-cash-status/get-cash-status.js';
 
 export class RegisterCashMovementInput {
   constructor(
-    readonly kind: 'withdrawal' | 'expense' | 'deposit',
+    readonly kind: CashMovementKind,
     readonly amountCents: number,
     readonly concept: string,
     readonly userId: string,

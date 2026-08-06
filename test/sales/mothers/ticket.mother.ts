@@ -6,7 +6,10 @@ export function chargedTicketMother(id = 'ticket-1'): Ticket {
   const open = Ticket.open(
     id,
     1,
-    [new UnitTicketLine('line-1', 'gaseosa', 'Inca Kola 600 ml', 2, 350)],
+    [new UnitTicketLine('line-1', 'gaseosa', 'Inca Kola 600 ml', 2, 350, 0)],
+    0,
+    null,
+    null,
     'cajera-rosa',
     'session-1',
     new Date('2026-07-29T10:00:00.000Z'),

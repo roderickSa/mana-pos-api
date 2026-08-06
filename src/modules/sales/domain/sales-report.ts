@@ -11,6 +11,7 @@ export class TicketListItem {
     readonly chargedAt: Nullable<Date>,
     readonly methods: PaymentMethodName[],
     readonly userId: string,
+    readonly customerName: Nullable<string>,
   ) {}
 }
 

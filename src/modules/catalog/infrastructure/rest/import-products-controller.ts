@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import * as XLSX from 'xlsx';
 
+import { roundToDime } from '#shared/domain/dime.js';
 import { UnitProduct } from '#modules/catalog/domain/product.js';
 import { CreateProduct } from '#modules/catalog/use-cases/create-product/create-product.js';
 import { SearchProducts } from '#modules/catalog/use-cases/search-products/search-products.js';
@@ -193,7 +194,9 @@ export class ImportProductsController {
       const supplierIds = supplierId === null ? [] : [supplierId];
       const barcode = row.codigo_barras === undefined || row.codigo_barras === '' ? null : row.codigo_barras;
       const quickAccess = row.acceso_rapido === 'si' || row.acceso_rapido === 'sí';
-      const priceCents = Math.round(row.precio * 100);
+      // Precio de venta a la diez más cercana (S/0.10 es la moneda mínima);
+      // el costo se conserva exacto, es dato contable.
+      const priceCents = roundToDime(row.precio * 100);
       const costCents = Math.round(row.costo * 100);
       const stockMinimum = row.stock_minimo ?? 0;
 

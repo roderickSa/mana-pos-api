@@ -52,6 +52,9 @@ export class GetCashStatus {
     const deposits = movements
       .filter((movement) => movement.kind === 'deposit')
       .reduce((sum, movement) => sum + movement.amountCents, 0);
+    const refunds = movements
+      .filter((movement) => movement.kind === 'refund')
+      .reduce((sum, movement) => sum + movement.amountCents, 0);
     return new CashBreakdown(
       session.openingAmountCents,
       cashSales,
@@ -59,6 +62,7 @@ export class GetCashStatus {
       withdrawals,
       expenses,
       deposits,
+      refunds,
     );
   }
 }

@@ -1,6 +1,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
+import { dimeCents } from '#shared/infrastructure/rest/money.dto.js';
+
 import { exhaustive } from '#shared/domain/exhaustive.js';
 import type { CustomerAccount } from '#modules/credit/domain/customer.js';
 import type { CreditEntry } from '#modules/credit/domain/credit-entry.js';
@@ -42,7 +44,7 @@ const listQueryDto = z.object({
 });
 
 const abonoDto = z.object({
-  amountCents: z.number().int().positive(),
+  amountCents: dimeCents(z.number().int().positive()),
   paymentMethod: z.enum(['cash', 'yape']),
   userId: z.string().min(1).default('encargado'),
 });
